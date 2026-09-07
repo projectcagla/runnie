@@ -1,0 +1,8 @@
+{
+  "name": "runapp-engine",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "node --experimental-strip-types --test tests/*.test.ts"
+  }
+}
