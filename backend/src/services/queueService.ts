@@ -213,7 +213,7 @@ export async function processNextEvaluationJob(db: DatabaseSync): Promise<SyncJo
     });
 
     const assessmentId = `asmt_${randomUUID()}`;
-    const heatPardoned = assessment.judgment === 'WEATHER_PARDON' ? 1 : 0;
+    const heatPardoned = assessment.analysisJudgment === 'WEATHER_PARDON' ? 1 : 0;
 
     // 5. Değişmez Değerlendirme Arşivine Yaz
     const insertAsmtStmt = db.prepare(`
@@ -226,26 +226,26 @@ export async function processNextEvaluationJob(db: DatabaseSync): Promise<SyncJo
       assessmentId,
       job.activity_id,
       thresholdRecordId,
-      assessment.judgment,
+      assessment.analysisJudgment,
       act.weather_status,
       heatPardoned,
       assessment.outputSentence,
       JSON.stringify(assessment.flags),
       JSON.stringify({
-        intent: assessment.intent,
+        intent: assessment.inferredIntent,
         confidenceLevel: assessment.confidenceLevel,
-        easyPct: assessment.zoneDistribution.zoneEasyPct,
-        moderatePct: assessment.zoneDistribution.zoneModeratePct,
-        thresholdPct: assessment.zoneDistribution.zoneThresholdPct,
+        easyPct: assessment.zoneEasyPct,
+        moderatePct: assessment.zoneModeratePct,
+        thresholdPct: assessment.zoneThresholdPct,
         secondaryCostSentence: assessment.secondaryCostSentence
       }),
       new Date().toISOString()
     );
 
     // 6. Push Bildirimini Tetikle ve 3 Dakika SLA Süresini Hesapla
-    const notificationTitle = assessment.judgment === 'ACCORDING_TO_PLAN'
+    const notificationTitle = assessment.analysisJudgment === 'ACCORDING_TO_PLAN'
       ? 'Koşu Şiddeti: Plana Uygun'
-      : (assessment.judgment === 'WEATHER_PARDON' ? 'Koşu Şiddeti: Isı Beraati' : 'Koşu Şiddeti Değerlendirmesi');
+      : (assessment.analysisJudgment === 'WEATHER_PARDON' ? 'Koşu Şiddeti: Isı Beraati' : 'Koşu Şiddeti Değerlendirmesi');
 
     await sendActivityPushNotification(db, job.user_id, {
       title: notificationTitle,

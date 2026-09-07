@@ -49,11 +49,9 @@ Koşunuz bittiği anda HealthKit üzerinden verileriniz akar ve 3 dakika içinde
 - **Eşik Aşımı:** Seans sert bir antrenmana dönüştü.
 - **Sınır Koridoru:** Fizyolojik belirsizlik alanında tamamlandı.
 
-### 2. Isı Beraati (Heat Acquittal Mechanism)
-Yazın $30^\circ\text{C}$ sıcaklıkta ve nemli havada koşarken nabzınızın yükselmesi eforunuzun disiplinsiz olduğu anlamına gelmez; kanın deriye pompalanması (kardiyak drift) doğal bir savunma mekanizmasıdır.
-- Runnie, koşunun yapıldığı saatteki hava durumunu Open-Meteo üzerinden sorgular.
-- Eğer sıcaklık ve nem yüksekken temponuzu yavaş tuttuysanız, nabzınız yükselse bile Runnie bunu bir ihlal saymaz: **"Isı Beraati"** verir.
-- Havanın cezasını koşucuya kesmez.
+### 2. Isı ve Fizyolojik Durum Beraatleri (Pardon Mechanisms)
+- **Isı Beraati:** Yazın $30^\circ\text{C}$ sıcaklıkta veya Karadeniz gibi nemli havalarda ($T \ge 24^\circ\text{C}$ **veya** $RH \ge \%75$) koşarken nabzınızın yükselmesi eforunuzun disiplinsiz olduğu anlamına gelmez. Eğer temponuzu yavaş tuttuysanız, kardiyak drift havanın sonucudur; Runnie bunu ihlal saymaz, **Isı Beraati** verir.
+- **Fizyolojik Durum Beraati:** Koşu sabahındaki dinlenik nabzınız tabanınızdan $\ge +5\text{ bpm}$ yüksekse veya HRV $\ge \%20$ baskılanmışsa, yükselen nabız hızınızdan değil vücudunuzun biyolojik toparlanma ihtiyacından kaynaklanır; motor temponuzu suçlamaz.
 
 ### 3. Dört Bölgeli Metabolik Dağılım
 Geleneksel saatlerin kaba "5 Bölge" ayrımı yerine fizyolojik gerçeğe sadık 4 bant takip edilir:
@@ -67,8 +65,9 @@ Laboratuvarda kan laktat testi yaptırmamış koşucuların Aerobik Eşiğini ($
 - Runnie, kolay bir koşudan sonra koşucuya tek bir soru sorar: *"Bu koşuda tam ve kesintisiz cümleler kurabiliyor muydunuz?"*
 - Bu yanıt, motorun eşik modelini doğrudan bireysel olarak kalibre eden sarsılmaz bir çıpa haline gelir.
 
-### 5. Akış İçi İnterval Tespiti
-Koşucu antrenman başlığına "Sabah Kolay Koşusu" yazmış olsa bile, akıştaki hız ve nabız patlamalarının varyansından seansın bir interval veya tempo koşusu olduğu otomatik anlaşılır. Yanıltıcı başlıklara kanmaz.
+### 5. Akış İçi İnterval Tespiti & Koşu Bandı Hattı
+- Koşucu antrenman başlığına "Sabah Kolay Koşusu" yazmış olsa bile, akıştaki hız ve nabız patlamalarının varyansından seansın bir interval veya tempo koşusu olduğu otomatik anlaşılır.
+- Koşu bandı seanslarında GPS ve hava sensörleri devre dışı bırakılır; yalnızca nabız kararlılığı analiz edilir.
 
 ### 6. Ayna Ekranı (The Mirror Screen)
 Son 60 günde en az **16 koşu** ve **100 km** tamamlandığında açılır.
@@ -90,16 +89,16 @@ Son 60 günde en az **16 koşu** ve **100 km** tamamlandığında açılır.
 
 ---
 
-## 📱 Ekran Görüntüleri ve Arayüz
+## 📱 Arayüz ve Tasarım Konsepti (Mockup)
 
-Runnie, göz yormayan derin karanlık mod (OLED Dark Mode) ve Apple tasarım çizgileriyle inşa edilmiştir.
+Runnie, göz yormayan derin karanlık mod (OLED Dark Mode) ve Apple tasarım çizgileriyle kurgulanmıştır.
 
 <br/>
 
-| Dürüstlük Kartı & Dağılım | Isı Beraati & Ayna Ekranı |
+| Dürüstlük Kartı Tasarım Konsepti | Bildirim & Ayna Ekranı Prototipi |
 | :---: | :---: |
 | <img src="assets/runnie_hero.png" width="450"/> | <img src="assets/runnie_features.png" width="450"/> |
-| *Son seansın fizyolojik maliyetini ve 4 bölgeli bant dağılımını gösteren ana arayüz.* | *Kilitli ekranda 3 dakikada beliren Isı Beraati bildirimi ve 60 günlük Ayna Ekranı.* |
+| *Dürüstlük Kartı (The Honesty Card) arayüz konsepti ve 4 bölgeli bant dağılımı spesifikasyonu.* | *Kilitli ekranda Isı Beraati bildirimi ve 60 günlük Ayna Ekranı tasarım mockup'ı.* |
 
 ---
 
@@ -108,7 +107,8 @@ Runnie, göz yormayan derin karanlık mod (OLED Dark Mode) ve Apple tasarım çi
 - **İstemci:** Swift, SwiftUI, HealthKit (`HKWorkout`, `HKQuantityTypeIdentifierRunningSpeed`, `HKWorkoutRouteQuery`).
 - **Sunucu & Motor:** Node.js çekirdeği (`node:sqlite`, `node:crypto`, `node:http`). Harici hiçbir üçüncü taraf npm bağımlılığı barındırmaz.
 - **Düzeltilmiş Minetti Maliyeti:** Yokuş yukarı ve yokuş aşağı koşularda yerçekimi enerji maliyetini Minetti (2002) metabolik güç faktörüyle (GAP) hesaplar.
-- **Kadans Kilitlenmesi Filtresi:** Optik nabız sensörlerinin adım frekansıyla kilitlendiği ($|HR - CAD| \le 3\text{ bpm}$) sahte nabız anomalilerini tespit eder.
+- **Kadans Kilitlenmesi Çift Sinyali:** Sensör kilitlenmesini hem adım yakınlığı ($|HR - CAD| \le 2$) hem de varyans çöküşü ($\sigma(HR) \le 1.2\text{ bpm}$) ile doğrular; doğal ritimleri korur.
+- **Aerobik Ayrışma (Decoupling) Koruması:** Kolay koşuda hız sabitken nabzın $>\%5$ sürüklendiği gizli eforları yakalar.
 - **Sürümlenmiş Eşikler:** Kalibrasyon değiştiğinde eski antrenmanlar sessizce manipüle edilmez; geriye dönük yeniden kalibre edildiği dürüstçe belirtilir.
 
 ---

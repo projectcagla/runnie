@@ -95,12 +95,20 @@ export type AssessmentJudgment =
   | 'DRIFTED_GRAY'
   | 'DRIFTED_THRESHOLD'
   | 'WEATHER_PARDON'
+  | 'PHYSIOLOGICAL_PARDON' // Dinlenik nabız yükselişi veya HRV çöküşü beraati
   | 'UNDER_STIMULATED'
   | 'QUALITY_SUCCESS'
   | 'BOUNDARY_ZONE'      // AeT hata aralığının içinde kalan belirsiz koşular
   | 'OBSERVATION_ONLY';
 
 export type ConfidenceLevel = 'HIGH' | 'MEDIUM' | 'LOW';
+
+export interface PhysiologicalBaselines {
+  restingHrBaseline?: number; // 30 günlük taban dinlenik nabız
+  hrvSdnnBaseline?: number;   // 30 günlük taban HRV
+  todayRestingHr?: number;    // Koşu sabahı dinlenik nabız
+  todayHrvSdnn?: number;      // Koşu sabahı HRV
+}
 
 export interface Assessment {
   activityId: string;
@@ -130,6 +138,7 @@ export interface Assessment {
   isSilenced: boolean;
   silenceReason?: string;
   steadyStateDurationSec: number;
+  aerobicDecouplingPct?: number; // Pw:Hr aerobik ayrışma oranı (%)
 }
 
 export interface EngineInput {
@@ -137,4 +146,5 @@ export interface EngineInput {
   stream: StreamPoint[];
   thresholds: UserThresholds;
   weather?: WeatherSnapshot;
+  physiologicalBaselines?: PhysiologicalBaselines;
 }

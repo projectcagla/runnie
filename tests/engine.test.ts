@@ -196,3 +196,77 @@ test('Karar Motoru: 90 Dakikadan Uzun Koşuda Kardiyak Sürüklenme Beklenir', (
   assert.strictEqual(assessment.inferredIntent, 'LONG');
   assert.strictEqual(assessment.flags.includes('CARDIAC_DRIFT_EXPECTED'), true);
 });
+
+test('Karar Motoru: Fizyolojik Durum Beraati (PHYSIOLOGICAL_PARDON)', () => {
+  // Koşucu kolay tempoda (360 s/km) koşmuş ancak nabzı 162 bpm'e yükselmiş (aşırı efor bölgesi)
+  // Hava serin (15°C, nem %50), yani ısı beraati YOK.
+  // Ancak koşu sabahındaki dinlenik nabzı tabanından (50) 6 bpm yüksek (56 bpm).
+  const stream = createSyntheticStream(2400, 162, 360);
+  const assessment = evaluateActivity({
+    activity: fixtureHotHumidPardon,
+    stream,
+    thresholds: standardThresholds,
+    weather: standardWeather,
+    physiologicalBaselines: {
+      restingHrBaseline: 50,
+      todayRestingHr: 56,
+      hrvSdnnBaseline: 65,
+      todayHrvSdnn: 60
+    }
+  });
+
+  assert.strictEqual(assessment.analysisJudgment, 'PHYSIOLOGICAL_PARDON');
+  assert.strictEqual(assessment.flags.includes('PHYSIOLOGICAL_PARDONED'), true);
+  assert.strictEqual(assessment.flags.includes('RESTING_HR_ELEVATED'), true);
+  assert.strictEqual(assessment.outputSentence.includes('dinlenik nabzın'), true);
+});
+
+test('Karar Motoru: Kadans Kilitlenmesi Çift Sinyal — Doğal RSA Dalgalanması Kilitlenme Sayılmaz', () => {
+  // Koşucunun kadansı 165, nabzı da ortalama 165 civarı; ancak solunum aritmisi (RSA) nedeniyle
+  // nabız 161 ile 169 arasında doğal dalgalanıyor (varyans çöküşü YOK, standart sapma > 1.2).
+  const stream: any[] = [];
+  for (let t = 0; t <= 2400; t += 10) {
+    const rsaOffset = (t % 40 === 0) ? 3 : (t % 40 === 10 ? -3 : (t % 40 === 20 ? 2 : -2));
+    stream.push({
+      t,
+      hr: 165 + rsaOffset,
+      cad: 165,
+      gap: 340,
+      dist: Math.round((t / 3600) * (3600 / 340) * 1000)
+    });
+  }
+
+  const assessment = evaluateActivity({
+    activity: fixtureCadenceLock,
+    stream,
+    thresholds: standardThresholds,
+    weather: standardWeather
+  });
+
+  // Doğal dalgalanma olduğu için CADENCE_LOCK bayrağı almamalı, nabız korunmalı!
+  assert.strictEqual(assessment.flags.includes('CADENCE_LOCK'), false);
+});
+
+test('Karar Motoru: Kolay Koşuda Aerobik Ayrışma Uyarısı (AEROBIC_DRIFT_WARNING)', () => {
+  // Hız sabit (350 sn/km = 5:50/km), ilk yarıda nabız 135 bpm, ikinci yarıda 148 bpm (ayrışma ~%9.6 > %5.0)
+  const stream: any[] = [];
+  for (let t = 0; t <= 2400; t += 10) {
+    const hr = t <= 1200 ? 135 : 148;
+    stream.push({
+      t,
+      hr,
+      cad: 168,
+      gap: 350
+    });
+  }
+
+  const assessment = evaluateActivity({
+    activity: fixturePerfectEasyRun,
+    stream,
+    thresholds: standardThresholds,
+    weather: standardWeather
+  });
+
+  assert.strictEqual(assessment.flags.includes('AEROBIC_DRIFT_WARNING'), true);
+  assert.strictEqual(assessment.aerobicDecouplingPct! > 5.0, true);
+});

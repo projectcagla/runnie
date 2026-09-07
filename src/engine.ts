@@ -77,28 +77,46 @@ export function evaluateActivity(input: EngineInput): Assessment {
   }
 
   const isTreadmill = activity.sportType === 'TREADMILL_RUN' || activity.surfaceType === 'TREADMILL';
-  if (isTreadmill) flags.push('TREADMILL');
+  if (isTreadmill) {
+    flags.push('TREADMILL');
+    if (!activity.hasHeartRate) {
+      return createSilencedAssessment(activity.id, activity.userId, thresholds.id, 'TREADMILL_NO_HR', 'Koşu bandında nabız ve GPS verisi bulunmadığından analiz yapılamaz.');
+    }
+    flags.push('TREADMILL_ONLY_HR');
+  }
 
   const isTrail = activity.sportType === 'TRAIL_RUN' || activity.surfaceType === 'TRAIL' || 
     (activity.distanceMeters > 0 && (activity.elevationGainMeters / (activity.distanceMeters / 1000) >= CONFIG.TRAIL_ELEVATION_GAIN_M_PER_KM));
   if (isTrail) flags.push('TRAIL');
 
-  // ADIM 2: KADANS KİLİTLENMESİ TESPİTİ
+  // ADIM 2: KADANS KİLİTLENMESİ TESPİTİ (ÇİFT SİNYAL: Yakınlık VE Varyans Çöküşü)
   let useHeartRate = activity.hasHeartRate;
   if (useHeartRate && stream && stream.length > 0) {
     let lockedSeconds = 0;
     let currentLockStreak = 0;
+    let streakHrs: number[] = [];
 
     for (let i = 1; i < stream.length; i++) {
       const p = stream[i];
       const dt = p.t - stream[i - 1].t;
       if (p.hr && p.cad && Math.abs(p.hr - p.cad) <= CONFIG.CADENCE_LOCK_DIFF_THRESHOLD) {
         currentLockStreak += dt;
+        streakHrs.push(p.hr);
+
         if (currentLockStreak >= CONFIG.CADENCE_LOCK_MIN_DURATION_SEC) {
-          lockedSeconds += dt;
+          // Kilitlenme penceresinde nabız standart sapması kontrolü
+          const mean = streakHrs.reduce((a, b) => a + b, 0) / streakHrs.length;
+          const variance = streakHrs.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / streakHrs.length;
+          const stdDev = Math.sqrt(variance);
+
+          // Gerçek kilitlenmede optik sensör adıma yapışır ve varyans çöker (stdDev <= 1.2)
+          if (stdDev <= CONFIG.CADENCE_LOCK_MAX_HR_STD_DEV) {
+            lockedSeconds += dt;
+          }
         }
       } else {
         currentLockStreak = 0;
+        streakHrs = [];
       }
     }
 
@@ -170,8 +188,48 @@ export function evaluateActivity(input: EngineInput): Assessment {
     inferredIntent = 'LONG';
   }
 
-  if (activity.athletesCount && activity.athletesCount > 1) {
+  if ((activity.athletesCount && activity.athletesCount > 1) || (activity as any).userFeedbackTag === 'GROUP_RUN') {
     flags.push('GROUP_RUN');
+  } else if (activity.startTime) {
+    const actDate = new Date(activity.startTime);
+    const dayOfWeek = actDate.getUTCDay(); // 0 = Pazar, 6 = Cumartesi
+    const hour = actDate.getUTCHours();
+    const isWeekendMorning = (dayOfWeek === 0 || dayOfWeek === 6) && (hour >= 4 && hour <= 10);
+    if (isWeekendMorning && steadyStream.length >= 30) {
+      const gaps = steadyStream.map(p => p.gap).filter((g): g is number => typeof g === 'number' && g > 0);
+      if (gaps.length > 20) {
+        const meanGap = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+        const varGap = gaps.reduce((a, b) => a + Math.pow(b - meanGap, 2), 0) / gaps.length;
+        const stdDevGap = Math.sqrt(varGap);
+        if (stdDevGap > 30) {
+          flags.push('GROUP_RUN_CANDIDATE');
+        }
+      }
+    }
+  }
+
+  // Aerobik Ayrışma (Decoupling) Hesabı
+  let aerobicDecouplingPct: number | undefined = undefined;
+  if (steadyStream.length >= 30) {
+    const validSteadyPoints = steadyStream.filter(p => p.hr && p.gap);
+    if (validSteadyPoints.length >= 20) {
+      const half = Math.floor(validSteadyPoints.length / 2);
+      const firstHalf = validSteadyPoints.slice(0, half);
+      const secondHalf = validSteadyPoints.slice(half);
+
+      const avgHr1 = firstHalf.reduce((s, p) => s + (p.hr || 0), 0) / firstHalf.length;
+      const avgGap1 = firstHalf.reduce((s, p) => s + (p.gap || 0), 0) / firstHalf.length;
+      const avgHr2 = secondHalf.reduce((s, p) => s + (p.hr || 0), 0) / secondHalf.length;
+      const avgGap2 = secondHalf.reduce((s, p) => s + (p.gap || 0), 0) / secondHalf.length;
+
+      if (avgGap1 > 0 && avgGap2 > 0 && Math.abs(avgGap2 - avgGap1) <= 25) {
+        const decoupling = ((avgHr2 * avgGap1) / (avgHr1 * avgGap2) - 1) * 100;
+        aerobicDecouplingPct = Math.round(decoupling * 10) / 10;
+        if (aerobicDecouplingPct > CONFIG.AEROBIC_DECOUPLING_MAX_PCT) {
+          flags.push('AEROBIC_DRIFT_WARNING');
+        }
+      }
+    }
   }
 
   // ADIM 6: 4 BÖLGELİ DAĞILIM HESABI
@@ -224,33 +282,54 @@ export function evaluateActivity(input: EngineInput): Assessment {
   // ADIM 7: HÜKÜM & ŞABLON SEÇİMİ (Ortalama Nabız Değil, Dağılım Kuralı!)
   let analysisJudgment: AssessmentJudgment = 'ACCORDING_TO_PLAN';
 
+  // Çevresel Isı Stresi (K5 Standardı: T >= 24°C VEYA Nem >= %75)
   const isHeatStress = weather && (
     weather.temperatureC >= CONFIG.HEAT_TEMPERATURE_THRESHOLD_C || 
     weather.relativeHumidity >= CONFIG.HEAT_HUMIDITY_THRESHOLD_PCT
   );
 
+  // Fizyolojik Yorgunluk Stresi (Dinlenik Nabız veya HRV Baskılanması)
+  const baselines = input.physiologicalBaselines;
+  let isPhysiologicalStress = false;
+  if (baselines?.todayRestingHr && baselines?.restingHrBaseline) {
+    if (baselines.todayRestingHr - baselines.restingHrBaseline >= CONFIG.PHYSIOLOGICAL_HR_REST_SPIKE_BPM) {
+      isPhysiologicalStress = true;
+      flags.push('RESTING_HR_ELEVATED');
+    }
+  }
+  if (baselines?.todayHrvSdnn && baselines?.hrvSdnnBaseline && baselines.hrvSdnnBaseline > 0) {
+    const dropPct = ((baselines.hrvSdnnBaseline - baselines.todayHrvSdnn) / baselines.hrvSdnnBaseline) * 100;
+    if (dropPct >= CONFIG.PHYSIOLOGICAL_HRV_DROP_PCT) {
+      isPhysiologicalStress = true;
+      flags.push('HRV_SUPPRESSED');
+    }
+  }
+
   if (inferredIntent === 'EASY') {
     const totalHighIntensityPct = definiteGrayPct + definiteThresholdPct;
+    const paceIsEasy = isTreadmill || (activity.gapSecPerKm >= thresholds.easyPaceCeilingGapSecPerKm);
 
     // KURAL 1: Net Kolay Koşu Başarısı
-    if (definiteEasyPct >= CONFIG.EASY_COMPLIANCE_ZONE1_MIN_PCT) {
+    // Kesin kolay süresi >= %75 VEYA sıfır yüksek şiddet ile kolay tempolu koşu
+    if (definiteEasyPct >= CONFIG.EASY_COMPLIANCE_ZONE1_MIN_PCT || (totalHighIntensityPct === 0 && paceIsEasy)) {
       analysisJudgment = 'ACCORDING_TO_PLAN';
     }
-    // KURAL 2: Net İhlal / Aşırı Şiddet
+    // KURAL 2: Net İhlal / Aşırı Şiddet veya Beraat
     else if (totalHighIntensityPct >= CONFIG.MILD_DRIFT_THRESHOLD_PCT) {
-      const paceIsEasy = activity.gapSecPerKm >= thresholds.easyPaceCeilingGapSecPerKm;
       if (isHeatStress && paceIsEasy) {
         analysisJudgment = 'WEATHER_PARDON';
         flags.push('WEATHER_PARDONED');
+      } else if (isPhysiologicalStress && paceIsEasy) {
+        analysisJudgment = 'PHYSIOLOGICAL_PARDON';
+        flags.push('PHYSIOLOGICAL_PARDONED');
       } else if (definiteThresholdPct >= CONFIG.SEVERE_DRIFT_THRESHOLD_PCT) {
         analysisJudgment = 'DRIFTED_THRESHOLD';
       } else {
         analysisJudgment = 'DRIFTED_GRAY';
       }
     }
-    // KURAL 3: Belirsizlik / Sınır Koridoru (Ortalama değil, koridordaki süreye göre!)
-    // Yüksek şiddet <%25 iken, koşunun en az %25'i belirsizlik koridorunda geçmişse
-    else if (uncertainCorridorPct >= 25 || (definiteEasyPct + uncertainCorridorPct >= 80)) {
+    // KURAL 3: Belirsizlik / Sınır Koridoru (Yalnızca yüksek şiddet <%25 iken ve sınırda salınım varsa)
+    else if (uncertainCorridorPct >= 25 && totalHighIntensityPct > 0) {
       analysisJudgment = 'BOUNDARY_ZONE';
       flags.push('BOUNDARY_CORRIDOR');
     } else {
@@ -278,8 +357,14 @@ export function evaluateActivity(input: EngineInput): Assessment {
     confidenceScore >= CONFIG.HIGH_CONFIDENCE_THRESHOLD ? 'HIGH' :
     confidenceScore >= CONFIG.MEDIUM_CONFIDENCE_THRESHOLD ? 'MEDIUM' : 'LOW';
 
-  if (confidenceLevel === 'LOW' && analysisJudgment !== 'WEATHER_PARDON' && analysisJudgment !== 'BOUNDARY_ZONE') {
-    analysisJudgment = 'OBSERVATION_ONLY';
+  if (confidenceLevel === 'LOW') {
+    // Soğuk başlangıç çıkmazı çözümü: Eşikler henüz doğrulanmamışken kullanıcıyı
+    // aşırı eforla suçlamamak için DRIFTED durumları OBSERVATION_ONLY yapılır.
+    // Ancak dengeli kolay koşularda (ACCORDING_TO_PLAN) kullanıcı sessiz bırakılmaz;
+    // EASY_ON_TRACK_LOW şablonuyla geçici referans bildirilir.
+    if (analysisJudgment === 'DRIFTED_GRAY' || analysisJudgment === 'DRIFTED_THRESHOLD') {
+      analysisJudgment = 'OBSERVATION_ONLY';
+    }
   }
 
   const matchedTemplate = selectTemplate({
@@ -328,7 +413,8 @@ export function evaluateActivity(input: EngineInput): Assessment {
     confidenceScore,
     flags,
     isSilenced: false,
-    steadyStateDurationSec: steadyDurationSec
+    steadyStateDurationSec: steadyDurationSec,
+    aerobicDecouplingPct
   };
 }
 
@@ -351,7 +437,12 @@ function selectTemplate(criteria: {
     if (treadTpl) return treadTpl;
   }
 
-  if (flags.includes('GROUP_RUN')) {
+  if (judgment === 'PHYSIOLOGICAL_PARDON') {
+    const physTpl = templateList.find(t => t.judgment === 'PHYSIOLOGICAL_PARDON');
+    if (physTpl) return physTpl;
+  }
+
+  if (flags.includes('GROUP_RUN') || flags.includes('GROUP_RUN_CANDIDATE')) {
     const groupTpl = templateList.find(t => t.edgeTag === 'GROUP_RUN' && t.judgment === judgment);
     if (groupTpl) return groupTpl;
   }

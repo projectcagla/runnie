@@ -13,10 +13,11 @@ export const CONFIG = {
   WARMUP_RATIO_MAX: 0.20, // Koşu süresinin en fazla %20'si ısınma sayılabilir (kısa koşularda veriyi yememek için).
   WARMUP_EARLY_EFFORT_SEC: 60, // Isınma içinde 60 saniye kesintisiz eşik üstü koşulursa ısınma penceresi derhal sonlandırılır.
 
-  // KADANS KİLİTLENMESİ (CADENCE LOCK) FİLTRESİ
+  // KADANS KİLİTLENMESİ (CADENCE LOCK) ÇİFT SİNYAL FİLTRESİ
   CADENCE_LOCK_DIFF_THRESHOLD: 2, // Nabız ile kadans arasındaki fark <= 2 ise sensör kilitlenmiş olabilir.
   CADENCE_LOCK_MIN_DURATION_SEC: 180, // Kilitlenmenin sensör hatası sayılması için en az 3 dakika kesintisiz sürmesi gerekir.
   CADENCE_LOCK_MAX_CORRUPT_RATIO: 0.30, // Koşunun %30'undan fazlası kilitliyse nabız verisi çöpe atılır, tempo moduna geçilir.
+  CADENCE_LOCK_MAX_HR_STD_DEV: 1.2, // Gerçek kilitlenmede nabız varyansı çöker (standart sapma <= 1.2 bpm).
 
   // ÇEVRESEL / HAVA EŞİKLERİ
   HEAT_TEMPERATURE_THRESHOLD_C: 24.0, // 24°C ve üzeri: Termoregülasyon için kan akışı cilde yönelir, nabız yükselir.
@@ -27,8 +28,17 @@ export const CONFIG = {
   // FİZYOLOJİK ORANLAR (EŞİK TÜRETME)
   // LTHR / HRmax oranı: Antrenmanlı dayanıklılık sporcularında ortalama %86.5'tir (Seiler, 2013).
   LTHR_RATIO_OF_HRMAX: 0.865,
-  // Aerobik Eşik (AeT / Zone 2 Tavanı): LTHR'nin sabit 20 bpm altı değil, oransal olarak %84'üdür (Olbrecht, 2000).
+  // Aerobik Eşik (AeT / Zone 2 Tavanı): Kalibre edilmemiş rekreasyonel koşucularda sistematik
+  // aşırı iyimserliği (Tip II hata) engellemek için konservatif %83 kullanılır.
   AET_RATIO_OF_LTHR: 0.84,
+  AET_RATIO_OF_LTHR_UNCALIBRATED: 0.83,
+  // Aerobik Ayrışma (Decoupling / Pw:Hr) Güvenlik Tavanı (%):
+  AEROBIC_DECOUPLING_MAX_PCT: 5.0, // Kolay koşuda hız sabitken nabız >%5 sürüklenirse gizli glikojen/eşik ihlali sayılır.
+  
+  // FİZYOLOJİK DURUM BERAATİ (PHYSIOLOGICAL STATE PARDON)
+  PHYSIOLOGICAL_HR_REST_SPIKE_BPM: 5.0, // Koşu sabahı dinlenik nabız tabandan >= 5 bpm yüksekse sistemik yorgunluk/hastalık sinyalidir.
+  PHYSIOLOGICAL_HRV_DROP_PCT: 20.0, // Koşu sabahı HRV (SDNN) tabandan >= %20 baskılanmışsa toparlanma eksikliği sinyalidir.
+
   // Karvonen Kalp Atım Rezervi (HRR) Katsayıları:
   AET_KARVONEN_RESERVE_RATIO: 0.65, // AeT = HR_rest + 0.65 * HRR
   LTHR_KARVONEN_RESERVE_RATIO: 0.85, // LTHR = HR_rest + 0.85 * HRR

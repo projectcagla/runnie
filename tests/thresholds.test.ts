@@ -46,7 +46,7 @@ test('Eşik Türetme: Ampirik Hız -> Nabız Eşlemesi (Bölüm 4 Çözümü)', 
   });
 
   assert.strictEqual(result.derivationMethod, 'EMPIRICAL_PACE_HR_MAPPING');
-  assert.strictEqual(result.confidenceScore >= 0.80, true);
+  assert.strictEqual(result.confidenceScore >= 0.70 && result.confidenceScore <= 0.75, true, 'Daniels bağımlılığı sebebiyle ampirik eşleme 0.70-0.75 aralığına çekilmelidir.');
   assert.strictEqual(result.aerobicThresholdHrPoint, 142);
   assert.strictEqual(result.aerobicThresholdHrMargin <= 3, true, 'Ampirik hata marjı daralmalıdır (+-3 bpm)');
 });

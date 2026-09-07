@@ -144,3 +144,18 @@ CREATE TABLE IF NOT EXISTS anonymized_audit_log (
   total_distance_km REAL NOT NULL,
   created_at TEXT NOT NULL
 );
+
+-- 11. Geriye Dönük Etiketleme ve Sistematik Sapma İzleme (Yer Gerçeği Akışı)
+CREATE TABLE IF NOT EXISTS user_feedbacks (
+  id TEXT PRIMARY KEY,
+  activity_id TEXT NOT NULL REFERENCES activities(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  feedback_tag TEXT NOT NULL, -- 'ACTUALLY_EASY', 'ACTUALLY_HARD', 'GROUP_RUN'
+  perceived_rpe INTEGER, -- 1-10 algılanan zorluk (isteğe bağlı)
+  note TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_feedbacks_user ON user_feedbacks(user_id);
+CREATE INDEX IF NOT EXISTS idx_feedbacks_tag ON user_feedbacks(feedback_tag);
+

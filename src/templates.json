@@ -112,6 +112,22 @@
     "secondaryCostSentence": "Sıcak havada tempo kontrolünü elden bırakmayarak toparlanma amacını başarıyla muhafaza ettin."
   },
   {
+    "id": "PHYSIOLOGICAL_PARDON_01",
+    "intent": "EASY",
+    "judgment": "PHYSIOLOGICAL_PARDON",
+    "confidenceLevel": "HIGH",
+    "primarySentence": "Koşu sabahındaki dinlenik nabzın veya toparlanma göstergelerin vücudunun ek bir yük altında olduğunu işaret ediyordu; tempon kolaydı, yükselen nabız hızından değil yorgunluktan kaynaklandı.",
+    "secondaryCostSentence": "Mekanik olarak doğru tempoda kalarak aşırı zorlamadan kaçındın; vücudunun biyolojik toparlanma ihtiyacına saygı göstermiş oldun."
+  },
+  {
+    "id": "PHYSIOLOGICAL_PARDON_02",
+    "intent": "EASY",
+    "judgment": "PHYSIOLOGICAL_PARDON",
+    "confidenceLevel": "HIGH",
+    "primarySentence": "Dinlenik nabzın son dönem ortalamanın üzerinde seyrediyor; kolay tempoda koşmana rağmen nabzın toparlanma koridorunun üstüne çıktı.",
+    "secondaryCostSentence": "Hata hızında değil, sistemik yorgunlukta; temponu yavaş tutarak doğru bir karar verdin."
+  },
+  {
     "id": "QUALITY_UNDER_01",
     "intent": "QUALITY",
     "judgment": "UNDER_STIMULATED",

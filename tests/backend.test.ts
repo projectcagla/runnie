@@ -172,3 +172,70 @@ test('Backend: Senkronizasyondan Değerlendirmeye Uçtan Uca Hat', async () => {
   assert.ok(asmt.sentence && asmt.sentence.length > 10, 'Türkçe değerlendirme cümlesi üretilmelidir.');
   assert.strictEqual(asmt.verdict, 'ACCORDING_TO_PLAN');
 });
+
+test('Backend: Geriye Dönük Etiketleme ve Sistematik Sapma Dedektörü (Bölüm 7.5 & 7.6)', async () => {
+  const db = createTestDb();
+  const { recordUserFeedback, detectSystematicCohortShift } = await import('../backend/src/services/feedbackService.ts');
+
+  // 3 farklı kullanıcı ve ACCORDING_TO_PLAN hükmü almış aktiviteler simüle et
+  for (let u = 1; u <= 3; u++) {
+    const userId = `user_shift_${u}`;
+    const actId = `act_shift_${u}`;
+    db.prepare("INSERT INTO users (id, created_at, last_active_at) VALUES (?, datetime('now'), datetime('now'))").run(userId);
+    db.prepare(`
+      INSERT INTO activities (
+        id, user_id, client_activity_id, source_name, sport_type, surface_type,
+        start_time, elapsed_time_sec, moving_time_sec, distance_meters,
+        elevation_gain_meters, avg_pace_sec_per_km, gap_sec_per_km, pace_source, created_at
+      ) VALUES (?, ?, ?, 'Watch', 'RUN', 'ROAD', datetime('now'), 1800, 1800, 5000, 0, 360, 360, 'SPEED', datetime('now'))
+    `).run(actId, userId, `client_${u}`);
+
+    db.prepare(`
+      INSERT INTO assessments (
+        id, activity_id, verdict, weather_status, sentence, reasons_json, metrics_snapshot_json, created_at
+      ) VALUES (?, ?, 'ACCORDING_TO_PLAN', 'UNAVAILABLE', 'Test cümle', '[]', '{}', datetime('now'))
+    `).run(`asmt_${u}`, actId);
+
+    // Her kullanıcı "Aslında zordu" (ACTUALLY_HARD) diyerek modelin aşırı iyimserliğini düzeltiyor
+    recordUserFeedback(db, {
+      activityId: actId,
+      userId,
+      feedbackTag: 'ACTUALLY_HARD',
+      perceivedRpe: 8
+    });
+  }
+
+  // 2 adet de ACCORDING_TO_PLAN onaylayan kullanıcı ekle
+  for (let u = 4; u <= 5; u++) {
+    const userId = `user_shift_${u}`;
+    const actId = `act_shift_${u}`;
+    db.prepare("INSERT INTO users (id, created_at, last_active_at) VALUES (?, datetime('now'), datetime('now'))").run(userId);
+    db.prepare(`
+      INSERT INTO activities (
+        id, user_id, client_activity_id, source_name, sport_type, surface_type,
+        start_time, elapsed_time_sec, moving_time_sec, distance_meters,
+        elevation_gain_meters, avg_pace_sec_per_km, gap_sec_per_km, pace_source, created_at
+      ) VALUES (?, ?, ?, 'Watch', 'RUN', 'ROAD', datetime('now'), 1800, 1800, 5000, 0, 360, 360, 'SPEED', datetime('now'))
+    `).run(actId, userId, `client_${u}`);
+
+    db.prepare(`
+      INSERT INTO assessments (
+        id, activity_id, verdict, weather_status, sentence, reasons_json, metrics_snapshot_json, created_at
+      ) VALUES (?, ?, 'ACCORDING_TO_PLAN', 'UNAVAILABLE', 'Test cümle', '[]', '{}', datetime('now'))
+    `).run(`asmt_${u}`, actId);
+
+    recordUserFeedback(db, {
+      activityId: actId,
+      userId,
+      feedbackTag: 'ACTUALLY_EASY',
+      perceivedRpe: 4
+    });
+  }
+
+  // Toplam 5 geri bildirimden 3'ü ACTUALLY_HARD (%60 >= %20 eşiği) ve 3 farklı kullanıcı
+  const report = detectSystematicCohortShift(db);
+  assert.strictEqual(report.shiftDetected, true, 'Sistematik sapma tespit edilmelidir');
+  assert.strictEqual(report.direction, 'AET_OVERESTIMATED');
+  assert.strictEqual(report.discrepancyRatio, 60.0);
+  assert.strictEqual(report.affectedUsersCount, 3);
+});

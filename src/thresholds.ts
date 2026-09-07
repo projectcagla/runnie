@@ -42,8 +42,9 @@ function deriveEmpiricalAeT(
   streams: Map<string, StreamPoint[]>,
   targetEasyPaceSec: number,
   observedPeakHr: number
-): { empiricalAeT: number; sampleCount: number } | null {
-  const matchingHeartRates: number[] = [];
+): { empiricalAeT: number; sampleCount: number; isDecouplingVerified: boolean } | null {
+  const lowDecouplingHeartRates: number[] = [];
+  const paceMatchingHeartRates: number[] = [];
   const paceToleranceSec = 25; // Hedef temponun +-25 sn/km civarı koridor
 
   for (const act of activities) {
@@ -53,39 +54,60 @@ function deriveEmpiricalAeT(
     const stream = streams.get(act.id);
     if (!stream || stream.length === 0) continue;
 
-    // Isınma sonrası ve kardiyak drift öncesi stabil pencere (dk 8 - dk 50)
-    for (let i = 1; i < stream.length; i++) {
-      const p = stream[i];
-      if (p.t < 480 || p.t > 3000) continue;
-      if (!p.hr || !p.gap) continue;
+    // 1. Aerobik Ayrışma (Decoupling) Analizi (Isınma sonrası dk 8 ile bitiş arası)
+    const steadyPoints = stream.filter(p => p.t >= 480 && p.t <= 3600 && p.hr && p.gap);
+    if (steadyPoints.length >= 30) {
+      const half = Math.floor(steadyPoints.length / 2);
+      const firstHalf = steadyPoints.slice(0, half);
+      const secondHalf = steadyPoints.slice(half);
 
-      if (Math.abs(p.gap - targetEasyPaceSec) <= paceToleranceSec) {
-        matchingHeartRates.push(p.hr);
+      const avgHr1 = firstHalf.reduce((s, p) => s + (p.hr || 0), 0) / firstHalf.length;
+      const avgGap1 = firstHalf.reduce((s, p) => s + (p.gap || 0), 0) / firstHalf.length;
+      const avgHr2 = secondHalf.reduce((s, p) => s + (p.hr || 0), 0) / secondHalf.length;
+      const avgGap2 = secondHalf.reduce((s, p) => s + (p.gap || 0), 0) / secondHalf.length;
+
+      // Hız nispeten stabilse (|avgGap2 - avgGap1| <= 20 s/km)
+      if (Math.abs(avgGap2 - avgGap1) <= 20 && avgGap1 > 0 && avgGap2 > 0) {
+        // Pw:Hr Decoupling hesapla: (HR2 * GAP1) / (HR1 * GAP2) - 1
+        const decoupling = ((avgHr2 * avgGap1) / (avgHr1 * avgGap2) - 1) * 100;
+        // Ayrışma minimal ise (<= %3.5), bu seans gerçek bir aerobik kararlı durumdur
+        if (decoupling <= 3.5 && decoupling >= -3.0) {
+          lowDecouplingHeartRates.push(Math.round((avgHr1 + avgHr2) / 2));
+        }
+      }
+    }
+
+    // 2. Yedek: Hedef Kolay Tempo Civarı Pencereler
+    for (const p of steadyPoints) {
+      if (p.hr && p.gap && Math.abs(p.gap - targetEasyPaceSec) <= paceToleranceSec) {
+        paceMatchingHeartRates.push(p.hr);
       }
     }
   }
 
-  if (matchingHeartRates.length < 30) {
-    return null; // Yetersiz ampirik veri
-  }
-
-  matchingHeartRates.sort((a, b) => a - b);
-  const mid = Math.floor(matchingHeartRates.length / 2);
-  const medianHr = matchingHeartRates[mid];
-
   // FİZYOLOJİK GÜVENLİK KONTROLÜ:
-  // Koşucunun geçmişinde tepe efor yoksa (observedPeakHr düşükse), en az 175 bpm taban alınır.
   const effectiveMaxHr = Math.max(observedPeakHr, 175);
   const maxAllowedAeT = Math.round(effectiveMaxHr * 0.82);
 
-  if (medianHr > maxAllowedAeT) {
-    return null; // Ölçülen tempo aerobik değil, eşik eforu içeriyor; ampirik olarak reddedilir
+  // Öncelik 1: Aerobik Ayrışması doğrulanmış seanslar
+  if (lowDecouplingHeartRates.length >= 2) {
+    lowDecouplingHeartRates.sort((a, b) => a - b);
+    const medianHr = lowDecouplingHeartRates[Math.floor(lowDecouplingHeartRates.length / 2)];
+    if (medianHr <= maxAllowedAeT) {
+      return { empiricalAeT: medianHr, sampleCount: lowDecouplingHeartRates.length, isDecouplingVerified: true };
+    }
   }
 
-  return {
-    empiricalAeT: medianHr,
-    sampleCount: matchingHeartRates.length
-  };
+  // Öncelik 2: Stabil tempo pencereleri
+  if (paceMatchingHeartRates.length >= 30) {
+    paceMatchingHeartRates.sort((a, b) => a - b);
+    const medianHr = paceMatchingHeartRates[Math.floor(paceMatchingHeartRates.length / 2)];
+    if (medianHr <= maxAllowedAeT) {
+      return { empiricalAeT: medianHr, sampleCount: paceMatchingHeartRates.length, isDecouplingVerified: false };
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -119,12 +141,14 @@ export function deriveThresholds(input: ThresholdDerivationInput): UserThreshold
     if (empirical) {
       aetPoint = empirical.empiricalAeT;
       aetMargin = 3; // +-3 bpm dar hata aralığı
-      confidence = 0.82;
+      // Daniels bağımlılığı ve sistematik yanlılık riski yüzünden 0.82 DEĞİL, bağımsız doğrulamaya göre 0.70-0.75 verilir
+      confidence = empirical.isDecouplingVerified ? 0.75 : 0.70;
       method = 'EMPIRICAL_PACE_HR_MAPPING';
     } else {
       const baseHrMax = observedPeakHr > 0 ? observedPeakHr : (208 - 0.7 * (appleMetrics.age ?? 35));
       const theoreticalLthr = Math.round(baseHrMax * CONFIG.LTHR_RATIO_OF_HRMAX);
-      aetPoint = Math.round(theoreticalLthr * CONFIG.AET_RATIO_OF_LTHR);
+      // Çıpasız rekreasyonel koşucularda sistematik aşırı iyimserliği (Tip II hata) engellemek için konservatif %83
+      aetPoint = Math.round(theoreticalLthr * CONFIG.AET_RATIO_OF_LTHR_UNCALIBRATED);
       aetMargin = 6; // +-6 bpm geniş hata aralığı (Hata birikimi yüzünden!)
       confidence = 0.60;
       method = 'APPLE_VO2MAX_THEORETICAL';
@@ -190,7 +214,7 @@ export function deriveThresholds(input: ThresholdDerivationInput): UserThreshold
   // 4. YOL 3: Yetersiz Veri / Gri Bölge Koşucusu (Geniş Belirsizlik)
   const hrMax = observedPeakHr > 0 ? observedPeakHr : 180;
   const lthr = Math.round(hrMax * CONFIG.LTHR_RATIO_OF_HRMAX);
-  const aetPoint = Math.round(lthr * CONFIG.AET_RATIO_OF_LTHR);
+  const aetPoint = Math.round(lthr * CONFIG.AET_RATIO_OF_LTHR_UNCALIBRATED);
 
   return {
     id: `thresh_${Date.now()}`,
