@@ -1,4 +1,4 @@
-# Koşu Şiddeti Asistanı
+# Runnie — Koşu Şiddeti Asistanı
 
 Orta seviye koşucular için koşu sonrası dürüstlük motoru: *"Bu koşu olması gereken şiddette miydi?"*
 

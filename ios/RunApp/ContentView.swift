@@ -133,7 +133,7 @@ public struct ContentView: View {
                 }
                 .padding(.vertical)
             }
-            .navigationTitle("Koşu Şiddeti")
+            .navigationTitle("Runnie")
             .sheet(isPresented: $showTalkTestSheet) {
                 talkTestSheetView()
             }
