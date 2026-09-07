@@ -22,6 +22,10 @@
     <string>1</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
+    <key>UIRequiresFullScreen</key>
+    <true/>
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
     <key>NSHealthShareUsageDescription</key>
     <string>Koşu şiddetinizi, aerobik eşiğinizi ve toparlanma maliyetinizi analiz etmek için antrenman ve sensör verilerinize ihtiyaç duyulur.</string>
     <key>NSHealthUpdateUsageDescription</key>
