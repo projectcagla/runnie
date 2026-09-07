@@ -194,8 +194,8 @@ export function createBackendServer(customDbPath?: string) {
           act.avgHr ?? null,
           act.maxHr ?? null,
           act.avgCadence ?? null,
-          act.avgPaceSecPerKm,
-          act.gapSecPerKm,
+          act.avgPaceSecPerKm ?? null,
+          act.gapSecPerKm ?? null,
           act.paceSource || 'ACTIVITY_AVERAGE',
           act.hasInstantaneousPace ? 1 : 0,
           weatherStatus,
@@ -208,6 +208,14 @@ export function createBackendServer(customDbPath?: string) {
           dedupDecision.duplicateOfId || null,
           new Date().toISOString()
         );
+
+        // Eğer gelen daha zengin olduğu için mevcut eski kayıt mükerrere düşürüldüyse güncelle
+        if (dedupDecision.supersededExistingId) {
+          db.prepare('UPDATE activities SET is_duplicate = 1, duplicate_of_id = ? WHERE id = ?')
+            .run(serverActivityId, dedupDecision.supersededExistingId);
+          db.prepare('DELETE FROM sync_jobs WHERE activity_id = ?').run(dedupDecision.supersededExistingId);
+          db.prepare('DELETE FROM assessments WHERE activity_id = ?').run(dedupDecision.supersededExistingId);
+        }
 
         // Akış noktalarını kaydet
         const insertStreamStmt = db.prepare(`

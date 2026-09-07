@@ -36,7 +36,31 @@ Bu doküman, sistemin kodlama aşamasında varsayılan ancak **gerçek koşucu v
 
 ---
 
-## 2. Sahada İlk Gerçek Koşucularla Doğrulanması Gereken Kalan Riskler
+## 2. Popülasyon Katsayıları ve Sosyolojik Varsayımlar
+
+1. **`AET_RATIO_OF_LTHR_UNCALIBRATED = 0.83` Katsayısı:**
+   - Popülasyon tabanı olarak seçilen bu katsayının yönü Tip II hatayı (laktat üreten rekreasyonel koşucuyu plana uygun sanma tehlikesini) azaltmak için muhafazakar yönde seçilmiştir; ancak kesin sayısal bireysel biyolojik dayanağı yoktur. Gerçek laktat eşiği laboratuvarda ölçülmeyen koşucularda bu oran $\pm 5\text{ bpm}$ sapabilir.
+2. **`GROUP_RUN_CANDIDATE` Kuralındaki Hafta Sonu Sabahı Varsayımı:**
+   - Cumartesi ve Pazar sabahları (04:00 - 10:00 UTC) ile tempo standart sapmasının $>30\text{ sn/km}$ olması bir popülasyon/sosyolojik varsayımdır. Hafta içi akşam koşan kulüpleri veya çok homojen tempolu grup koşularını algılayamaz; bu kullanıcılar için tek dokunuşlu elle etiketleme (`userFeedbackTag = 'GROUP_RUN'`) yegane güvenilir kanal kalır.
+
+---
+
+## 3. Mimari Kararlar, Ertelenen Seçenekler ve Kalan Sınırlar
+
+1. **Kayıt Birleştirme (Hybrid Merge) Ertelenmiş Bir Seçenektir:**
+   - Apple Watch (mesafe, anlık tempo, GPS rotası, GAP) ile WHOOP'un yoğun nabız akışını tek bir melez aktivitede harmanlamak teorik olarak cazip görünse de; zaman damgası kayması, cihazların duraklamaları farklı işlemesi ve çakışma çözümünün getireceği karmaşıklık nedeniyle kod düzeyinde uygulanmamış, ertelenmiştir.
+2. **Tempo Fakir Tek Kaynaklı Kullanıcılarda Kapanan Özellikler:**
+   - Kullanıcı yalnızca WHOOP gibi mesafe ve anlık tempo üretmeyen tek bir donanımla koştuğunda aşağıdaki özellikler doğrudan devre dışı kalır:
+     - **Isı Beraati (`WEATHER_PARDON`):** Nabız yükseldiğinde temponun gerçekten kolay tutulup tutulmadığı bilinemez.
+     - **Grup Koşusu Algoritmik Tespiti (`GROUP_RUN_CANDIDATE`):** Tempo varyansı hesaplanamaz; geriye dönük elle etiketleme zorunludur.
+     - **Eğim Düzeltmeli Hız (GAP) ve Tempo Dağılımı:** Nabız kilitlenmesi veya sensör kaybında yedeğe geçilemez.
+     - **Patika (Trail) Tespiti:** Mesafe bilinmediğinden km başına irtifa kazancı hesaplanamaz.
+3. **Tarihsel Çift Sayım Güvensizliği:**
+   - Çift cihaz eşzamanlı takibindeki tekilleştirme hatası düzeltilmeden önce, hem Apple Watch hem WHOOP taşıyan kullanıcıların tüm koşuları veritabanında iki kez sayılmıştır. Bu nedenle önceki turlarda telemetride görülen koşu sayıları, haftalık antrenman yükleri ve hacim istatistikleri gerçeği yansıtmamaktadır ve güvenilmezdir.
+
+---
+
+## 4. Sahada İlk Gerçek Koşucularla Doğrulanması Gereken Kalan Riskler
 
 1. **Apple Health XML Dışa Aktarımındaki Gerçek Hız Kaynağı:**
    - Kod 3 kademeli hiyerarşi kurdu (`RunningSpeed` $\rightarrow$ `GPX` $\rightarrow$ `DistanceWalkingRunning`). Tipik kullanıcı dışa aktarımında `RunningSpeed` kayıtlarının kapsama oranının $\ge \%80$ olduğu gerçek bir arşivde gözlemlenmelidir.

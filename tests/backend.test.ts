@@ -83,6 +83,95 @@ test('Backend: Tekilleştirme — Tek Kopya Korunmalı, Zengin Olan Tutulmalı',
   assert.strictEqual(dupDecision.duplicateOfId, 'act_1');
 });
 
+test('Backend: Çift Cihaz Eşzamanlı Takip — Apple Watch vs WHOOP (Sıfır Mesafe Zaman Örtüşmesi)', () => {
+  const appleWatchAct: NormalizedActivity = {
+    id: 'act_apple_watch',
+    userId: 'usr_1',
+    sportType: 'RUN',
+    surfaceType: 'ROAD',
+    title: 'Apple Watch Koşusu',
+    startTime: '2026-08-01T07:00:00.000Z',
+    elapsedTimeSec: 2400,
+    movingTimeSec: 2400,
+    distanceMeters: 6500,
+    elevationGainMeters: 20,
+    hasHeartRate: true,
+    avgHr: 142,
+    avgCadence: 168,
+    avgPaceSecPerKm: 369,
+    gapSecPerKm: 369,
+    sourceName: 'Apple Watch Series 9',
+    paceSource: 'RUNNING_SPEED',
+    hasInstantaneousPace: true,
+    startLatitude: 41.0082,
+    startLongitude: 28.9784
+  };
+
+  const whoopAct: NormalizedActivity = {
+    id: 'act_whoop',
+    userId: 'usr_1',
+    sportType: 'RUN',
+    surfaceType: 'ROAD',
+    title: 'Aktivite',
+    startTime: '2026-08-01T06:58:30.000Z', // 90 sn önce başlamış
+    elapsedTimeSec: 2520, // 42 dakika
+    movingTimeSec: 2520,
+    distanceMeters: 0, // WHOOP mesafesiz
+    elevationGainMeters: 0,
+    hasHeartRate: true,
+    avgHr: 143,
+    sourceName: 'WHOOP'
+  };
+
+  const awStream = [{ t: 0, hr: 130, cad: 168 }, { t: 600, hr: 142, cad: 170 }];
+  const whoopStream = [{ t: 0, hr: 132 }, { t: 300, hr: 140 }, { t: 600, hr: 144 }];
+
+  // Sıra 1: Apple Watch mevcutken WHOOP senkronize olursa: WHOOP mükerrer işaretlenmeli, Apple Watch kazanan olmalı
+  const whoopArrivesDecision = evaluateDeduplication(
+    { activity: whoopAct, stream: whoopStream },
+    [{ activity: appleWatchAct, stream: awStream }]
+  );
+  assert.strictEqual(whoopArrivesDecision.action, 'MARK_DUPLICATE');
+  assert.strictEqual(whoopArrivesDecision.duplicateOfId, 'act_apple_watch');
+
+  // Sıra 2: WHOOP önce gelmişse ve ardından Apple Watch gelirse:
+  // Apple Watch KEEP olmalı ve mevcut WHOOP kaydını 'supersededExistingId' ile düşürmelidir
+  const awArrivesDecision = evaluateDeduplication(
+    { activity: appleWatchAct, stream: awStream },
+    [{ activity: whoopAct, stream: whoopStream }]
+  );
+  assert.strictEqual(awArrivesDecision.action, 'KEEP');
+  assert.strictEqual(awArrivesDecision.supersededExistingId, 'act_whoop');
+});
+
+test('Backend: Koşu Akıl Sağlığı Filtresi — 2h 45m Sıfır Mesafeli Seans Ayıklanmalı', () => {
+  // Telemetride görülen 2 saat 45 dakikalık, sıfır mesafeli ve 32 adımlı seans
+  const suspiciousSession: NormalizedActivity = {
+    id: 'act_sleep_or_rest',
+    userId: 'usr_1',
+    sportType: 'RUN',
+    surfaceType: 'ROAD',
+    title: 'Otomatik Seans',
+    startTime: '2026-08-01T14:00:00.000Z',
+    elapsedTimeSec: 9900, // 2 saat 45 dakika
+    movingTimeSec: 9900,
+    distanceMeters: 0,
+    elevationGainMeters: 0,
+    hasHeartRate: true,
+    avgHr: 68, // Dinlenik nabız
+    avgCadence: 2, // Adımsız
+    sourceName: 'WHOOP'
+  };
+
+  const decision = evaluateDeduplication(
+    { activity: suspiciousSession, stream: [{ t: 0, hr: 65 }, { t: 1800, hr: 70 }] },
+    []
+  );
+
+  assert.strictEqual(decision.action, 'MARK_DUPLICATE');
+  assert.strictEqual(decision.duplicateOfId, 'SUSPICIOUS_NON_RUN');
+});
+
 test('Backend: Hava Servisi — Koordinat Yokken 20°C Uydurulmamalı (UNAVAILABLE)', async () => {
   const db = createTestDb();
   const res = await getHistoricalWeather(db, {

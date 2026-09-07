@@ -43,8 +43,8 @@ CREATE TABLE IF NOT EXISTS activities (
   avg_hr INTEGER,
   max_hr INTEGER,
   avg_cadence INTEGER,
-  avg_pace_sec_per_km INTEGER NOT NULL,
-  gap_sec_per_km INTEGER NOT NULL,
+  avg_pace_sec_per_km INTEGER,
+  gap_sec_per_km INTEGER,
   pace_source TEXT NOT NULL,
   has_instantaneous_pace INTEGER NOT NULL DEFAULT 0,
   weather_status TEXT NOT NULL DEFAULT 'UNAVAILABLE', -- 'AVAILABLE', 'UNAVAILABLE'

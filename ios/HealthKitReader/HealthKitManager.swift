@@ -28,7 +28,8 @@ public final class HealthKitManager {
             HKObjectType.quantityType(forIdentifier: .stepCount)!,
             HKObjectType.quantityType(forIdentifier: .distanceWalkingRunning)!,
             HKObjectType.quantityType(forIdentifier: .vo2Max)!,
-            HKObjectType.quantityType(forIdentifier: .restingHeartRate)!
+            HKObjectType.quantityType(forIdentifier: .restingHeartRate)!,
+            HKObjectType.quantityType(forIdentifier: .heartRateVariabilitySDNN)!
         ]
 
         // iOS 16+ İleri Düzey Koşu Metrikleri
@@ -56,9 +57,17 @@ public final class HealthKitManager {
 
     /**
      * Son Koşu Antrenmanlarını Sorgular (HKWorkoutActivityTypeRunning)
+     * Varsayılan olarak son 60 günü tam kapsar ve limit koymaz (HKObjectQueryNoLimit).
      */
-    public func fetchRecentRunningWorkouts(limit: Int = 50) async throws -> [HKWorkout] {
-        let predicate = HKQuery.predicateForWorkouts(with: .running)
+    public func fetchRecentRunningWorkouts(days: Int = 60, limit: Int = HKObjectQueryNoLimit) async throws -> [HKWorkout] {
+        let runningPredicate = HKQuery.predicateForWorkouts(with: .running)
+        let predicate: NSPredicate
+        if let startDate = Calendar.current.date(byAdding: .day, value: -days, to: Date()) {
+            let datePredicate = HKQuery.predicateForSamples(withStart: startDate, end: nil, options: .strictStartDate)
+            predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [runningPredicate, datePredicate])
+        } else {
+            predicate = runningPredicate
+        }
         let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
 
         return try await withCheckedThrowingContinuation { continuation in
@@ -182,6 +191,69 @@ public final class HealthKitManager {
                 }
             }
             healthStore.execute(routeQuery)
+        }
+    }
+
+    /**
+     * VO2max Örneklerini Çeker (Son N gün)
+     */
+    public func fetchVO2MaxSamples(days: Int = 365) async throws -> [HKQuantitySample] {
+        guard let vo2Type = HKQuantityType.quantityType(forIdentifier: .vo2Max) else { return [] }
+        let startDate = Calendar.current.date(byAdding: .day, value: -days, to: Date())
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: nil, options: .strictStartDate)
+        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKSampleQuery(sampleType: vo2Type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sortDescriptor]) { _, samples, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                continuation.resume(returning: (samples as? [HKQuantitySample]) ?? [])
+            }
+            healthStore.execute(query)
+        }
+    }
+
+    /**
+     * Dinlenik Kalp Atım Hızı (Resting Heart Rate) Örneklerini Çeker
+     */
+    public func fetchRestingHeartRateSamples(days: Int = 60) async throws -> [HKQuantitySample] {
+        guard let rhrType = HKQuantityType.quantityType(forIdentifier: .restingHeartRate) else { return [] }
+        let startDate = Calendar.current.date(byAdding: .day, value: -days, to: Date())
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: nil, options: .strictStartDate)
+        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKSampleQuery(sampleType: rhrType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sortDescriptor]) { _, samples, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                continuation.resume(returning: (samples as? [HKQuantitySample]) ?? [])
+            }
+            healthStore.execute(query)
+        }
+    }
+
+    /**
+     * Kalp Hızı Değişkenliği (HRV SDNN) Örneklerini Çeker
+     */
+    public func fetchHrvSamples(days: Int = 60) async throws -> [HKQuantitySample] {
+        guard let hrvType = HKQuantityType.quantityType(forIdentifier: .heartRateVariabilitySDNN) else { return [] }
+        let startDate = Calendar.current.date(byAdding: .day, value: -days, to: Date())
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: nil, options: .strictStartDate)
+        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKSampleQuery(sampleType: hrvType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sortDescriptor]) { _, samples, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                continuation.resume(returning: (samples as? [HKQuantitySample]) ?? [])
+            }
+            healthStore.execute(query)
         }
     }
 }

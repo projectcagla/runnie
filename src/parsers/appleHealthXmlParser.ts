@@ -42,6 +42,7 @@ export interface DuplicateWorkoutPair {
   workout2: { id: string; source: string; startTime: string; distanceMeters: number };
   timeDiffSec: number;
   distanceDiffMeters: number;
+  winnerSource?: string;
 }
 
 export interface DateParsingSample {
@@ -627,7 +628,7 @@ export async function parseAppleHealthExport(input: AppleHealthParserOptions | s
     const streamPoints: StreamPoint[] = [];
     const duration = w.durationSec;
     const avgSpeedMetersPerSec = duration > 0 ? (w.distanceMeters / duration) : 0;
-    const avgPaceSecPerKm = avgSpeedMetersPerSec > 0 ? Math.round(1000 / avgSpeedMetersPerSec) : 360;
+    const avgPaceSecPerKm = avgSpeedMetersPerSec > 0 ? Math.round(1000 / avgSpeedMetersPerSec) : undefined;
 
     let hrSum = 0;
     let hrMax = 0;
@@ -841,21 +842,42 @@ export async function parseAppleHealthExport(input: AppleHealthParserOptions | s
       const w2 = workouts[j];
       const timeDiffSec = Math.abs(w1.startMs - w2.startMs) / 1000;
       
-      // Başlangıç zamanları 120 saniyeden yakınsa
-      if (timeDiffSec <= 120) {
+      const dur1Sec = Math.max(1, w1.durationSec);
+      const dur2Sec = Math.max(1, w2.durationSec);
+      const end1Ms = w1.startMs + dur1Sec * 1000;
+      const end2Ms = w2.startMs + dur2Sec * 1000;
+      const overlapMs = Math.max(0, Math.min(end1Ms, end2Ms) - Math.max(w1.startMs, w2.startMs));
+      const minDurMs = Math.min(dur1Sec, dur2Sec) * 1000;
+
+      let isCandidate = false;
+      // İki tarafta da mesafe varsa
+      if (w1.distanceMeters > 50 && w2.distanceMeters > 50) {
         const distDiff = Math.abs(w1.distanceMeters - w2.distanceMeters);
         const maxDist = Math.max(1, w1.distanceMeters, w2.distanceMeters);
-        // Mesafeler birbirine %5 veya daha yakınsa
-        if (distDiff / maxDist <= 0.05) {
-          duplicateWorkoutsFound.push({
-            workout1: { id: w1.id, source: w1.sourceName, startTime: w1.startDate.toISOString(), distanceMeters: w1.distanceMeters },
-            workout2: { id: w2.id, source: w2.sourceName, startTime: w2.startDate.toISOString(), distanceMeters: w2.distanceMeters },
-            timeDiffSec,
-            distanceDiffMeters: distDiff
-          });
+        if (distDiff / maxDist <= 0.10 && (timeDiffSec <= 1800 || overlapMs > 0)) {
+          isCandidate = true;
         }
-      } else if (w2.startMs - w1.startMs > 120000) {
-        // Antrenmanlar zamana göre sıralı olduğundan erken çıkış yapılabilir
+      } else if (timeDiffSec <= 1800 && overlapMs > 0) {
+        // Bir tarafta mesafe yoksa zaman örtüşmesiyle eşleştir
+        if (overlapMs / minDurMs >= 0.40 || overlapMs >= 300_000) {
+          isCandidate = true;
+        }
+      }
+
+      if (isCandidate) {
+        const distDiff = Math.abs(w1.distanceMeters - w2.distanceMeters);
+        const score1 = (w1.distanceMeters > 100 ? 30 : 0) + ((w1.speedSamples?.length || 0) > 0 ? 35 : 0) + ((w1.routeLocations?.length || 0) > 0 ? 15 : 0) + ((w1.stepSamples?.length || 0) > 0 ? 10 : 0) + ((w1.hrSamples?.length || 0) > 0 ? 10 : 0);
+        const score2 = (w2.distanceMeters > 100 ? 30 : 0) + ((w2.speedSamples?.length || 0) > 0 ? 35 : 0) + ((w2.routeLocations?.length || 0) > 0 ? 15 : 0) + ((w2.stepSamples?.length || 0) > 0 ? 10 : 0) + ((w2.hrSamples?.length || 0) > 0 ? 10 : 0);
+        const winner = score1 >= score2 ? w1.sourceName : w2.sourceName;
+
+        duplicateWorkoutsFound.push({
+          workout1: { id: w1.id, source: w1.sourceName, startTime: w1.startDate.toISOString(), distanceMeters: w1.distanceMeters },
+          workout2: { id: w2.id, source: w2.sourceName, startTime: w2.startDate.toISOString(), distanceMeters: w2.distanceMeters },
+          timeDiffSec,
+          distanceDiffMeters: distDiff,
+          winnerSource: winner
+        });
+      } else if (w2.startMs - w1.startMs > 1800000) {
         break;
       }
     }

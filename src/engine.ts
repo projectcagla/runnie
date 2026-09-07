@@ -76,6 +76,18 @@ export function evaluateActivity(input: EngineInput): Assessment {
     return createSilencedAssessment(activity.id, activity.userId, thresholds.id, 'DURATION_TOO_SHORT', '15 dakikadan kısa aktivite; fizyolojik analiz yapılamaz.');
   }
 
+  // ADIM 1.1: KOŞU AKIL SAĞLIĞI FİLTRESİ (SANITY FILTER)
+  const isZeroDistance = (activity.distanceMeters || 0) <= 50;
+  const hasLowCadence = activity.avgCadence !== undefined && activity.avgCadence < 60;
+  const hasNoRunningCadenceInStream = stream && stream.length > 0 &&
+    !stream.some(p => p.cad !== undefined && p.cad >= 60);
+
+  if (isZeroDistance && activity.movingTimeSec >= 300) {
+    if (hasLowCadence || hasNoRunningCadenceInStream || (!activity.avgCadence && !activity.hasInstantaneousPace && (activity.avgHr ?? 0) < 95)) {
+      return createSilencedAssessment(activity.id, activity.userId, thresholds.id, 'SUSPICIOUS_NON_RUN', 'Şüpheli koşu dışı aktivite; sıfır mesafe ve koşu kadansı tespit edilemedi.');
+    }
+  }
+
   const isTreadmill = activity.sportType === 'TREADMILL_RUN' || activity.surfaceType === 'TREADMILL';
   if (isTreadmill) {
     flags.push('TREADMILL');
@@ -255,14 +267,16 @@ export function evaluateActivity(input: EngineInput): Assessment {
         }
       } else {
         const gap = p.gap || activity.gapSecPerKm;
-        if (gap >= thresholds.easyPaceCeilingGapSecPerKm + 15) {
-          defEasySec += dt;
-        } else if (gap >= thresholds.easyPaceCeilingGapSecPerKm - 15) {
-          uncCorridorSec += dt;
-        } else if (gap > thresholds.thresholdPaceGapSecPerKm) {
-          defGraySec += dt;
-        } else {
-          defThreshSec += dt;
+        if (gap !== undefined && gap > 0) {
+          if (gap >= thresholds.easyPaceCeilingGapSecPerKm + 15) {
+            defEasySec += dt;
+          } else if (gap >= thresholds.easyPaceCeilingGapSecPerKm - 15) {
+            uncCorridorSec += dt;
+          } else if (gap > thresholds.thresholdPaceGapSecPerKm) {
+            defGraySec += dt;
+          } else {
+            defThreshSec += dt;
+          }
         }
       }
     }
@@ -307,7 +321,11 @@ export function evaluateActivity(input: EngineInput): Assessment {
 
   if (inferredIntent === 'EASY') {
     const totalHighIntensityPct = definiteGrayPct + definiteThresholdPct;
-    const paceIsEasy = isTreadmill || (activity.gapSecPerKm >= thresholds.easyPaceCeilingGapSecPerKm);
+    const paceIsEasy = isTreadmill || (
+      activity.gapSecPerKm !== undefined &&
+      thresholds.easyPaceCeilingGapSecPerKm !== undefined &&
+      activity.gapSecPerKm >= thresholds.easyPaceCeilingGapSecPerKm
+    );
 
     // KURAL 1: Net Kolay Koşu Başarısı
     // Kesin kolay süresi >= %75 VEYA sıfır yüksek şiddet ile kolay tempolu koşu

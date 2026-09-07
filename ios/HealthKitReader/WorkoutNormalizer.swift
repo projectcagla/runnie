@@ -22,8 +22,8 @@ public struct IOSNormalizedActivity: Codable {
     public let avgHr: Int?
     public let maxHr: Int?
     public let avgCadence: Int?
-    public let avgPaceSecPerKm: Int
-    public let gapSecPerKm: Int
+    public let avgPaceSecPerKm: Int?
+    public let gapSecPerKm: Int?
     public let paceSource: String
     public let hasInstantaneousPace: Bool
     public let startLatitude: Double?
@@ -55,7 +55,7 @@ public final class WorkoutNormalizer {
         let durationSec = max(1, Int(workout.duration))
         let distanceMeters = workout.totalDistance?.doubleValue(for: .meter()) ?? 0
         let avgSpeed = durationSec > 0 ? (distanceMeters / Double(durationSec)) : 0
-        let avgPaceSecPerKm = avgSpeed > 0.5 ? Int(1000 / avgSpeed) : 360
+        let avgPaceSecPerKm: Int? = avgSpeed > 0.5 ? Int(1000 / avgSpeed) : nil
 
         // 3 Kademeli Hız Belirleme
         let paceSource: String
@@ -107,7 +107,7 @@ public final class WorkoutNormalizer {
             }
 
             // 3. Anlık Hız / GAP
-            var pointGap = avgPaceSecPerKm
+            var pointGap: Int? = avgPaceSecPerKm
             if paceSource == "RUNNING_SPEED",
                let speedSample = speedSamples.min(by: { abs($0.startDate.timeIntervalSince(pointTime)) < abs($1.startDate.timeIntervalSince(pointTime)) }),
                abs(speedSample.startDate.timeIntervalSince(pointTime)) <= 10.0 {
@@ -117,8 +117,8 @@ public final class WorkoutNormalizer {
                 }
             }
 
-            if pointGap > 0 && pointGap < 1200 {
-                gapSum += pointGap
+            if let pg = pointGap, pg > 0 && pg < 1200 {
+                gapSum += pg
                 validGapCount += 1
             }
 
@@ -135,7 +135,7 @@ public final class WorkoutNormalizer {
         let isIndoor = (workout.metadata?[HKMetadataKeyIndoorWorkout] as? Bool) ?? false
         let avgHr = validHrCount > 0 ? (hrSum / validHrCount) : nil
         let avgCadence = validCadCount > 0 ? (cadSum / validCadCount) : nil
-        let activityGap = validGapCount > 0 ? (gapSum / validGapCount) : avgPaceSecPerKm
+        let activityGap: Int? = validGapCount > 0 ? (gapSum / validGapCount) : avgPaceSecPerKm
 
         let firstLoc = routeLocations.first
 

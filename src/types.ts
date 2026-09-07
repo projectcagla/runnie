@@ -17,8 +17,8 @@ export interface NormalizedActivity {
   avgHr?: number;
   maxHr?: number;
   avgCadence?: number;
-  avgPaceSecPerKm: number;
-  gapSecPerKm: number; // Grade Adjusted Pace (saniye/km)
+  avgPaceSecPerKm?: number;
+  gapSecPerKm?: number; // Grade Adjusted Pace (saniye/km)
   surfaceType: SurfaceType;
   athletesCount?: number;
   isManual?: boolean;

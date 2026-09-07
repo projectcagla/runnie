@@ -81,3 +81,55 @@ Bu doküman, kullanıcı tarafından devredilen yetki ve yapılan depo incelemes
 - **Amacı:** Hüküm vermez, nasihat etmez; veriyi koşucunun yüzüne ayna olarak tutar.
 - **Tetik Soru:** Eğer son 60 gündeki koşuların $\ge \%50$'si eşik üstünde veya gri bölgede bitmişse tarafsızca sorar:
   *"Son 60 günde X koşunun %Y'si AeT eşiği üzerinde geçti. Bu dağılım planlı bir maraton/tempo hazırlığı mı, yoksa farkında olmadan mı hızlandınız?"*
+
+---
+
+## 5. Çift Cihaz Eşzamanlı Takip ve Tekilleştirme (Deduplication) Kuralları
+
+### 5.1. Çift Tespiti ve Tolerans Mantığı
+- **Adaylık Kuralı:** Başlangıç zamanları birbirine yakın ($\le 1800\text{ sn}$) olan antrenmanlar aday çifttir.
+- **Mesafe Kriteri:** Mesafe karşılaştırması yalnızca her iki kayıtta da mesafe varsa ($> 50\text{ m}$) uygulanır (fark $\le \%10$).
+- **Zaman Örtüşmesi Kriteri:** Bir tarafta mesafe yoksa (ör. WHOOP), eşleştirme tamamen zaman örtüşmesiyle yapılır. Süreler birbirini kapsıyorsa veya kısa olanın en az $\%40$'ı (ya da $\ge 300\text{ sn}$) örtüşüyorsa aynı seanstır. Cihazların duraklamaları farklı işlemesi nedeniyle süre toleransı geniş tutulmuştur.
+
+### 5.2. Veri Zenginliği Puanlaması (En Fazla 100 Puan)
+- Anlık Hız / GAP Kalitesi: `RUNNING_SPEED` (+35), `GPX_TRACKPOINT` (+30), `DISTANCE_INTERVAL` (+20), `hasInstantaneousPace` (+5).
+- Mesafe Varlığı: $> 100\text{ m}$ (+30).
+- Rota / GPS Koordinatı: (+15).
+- Kadans Varlığı: (+10).
+- Nabız Serisi Varlığı: (+10).
+- **Eşitlik Kuralı:** Puanlar eşitse donanım/saat kaynağı (`isHardwareSource`) üçüncü parti köprü uygulamaya tercih edilir.
+
+### 5.3. Kayıt Birleştirmeme (No-Merge) Kararı ve Gerekçesi
+- İki kaydın alanlarını harmanlayan melez bir kayıt üretilmez.
+- WHOOP'un ~2.9 saniyelik daha sık nabzının getireceği marjinal fayda; farklı başlangıç/bitiş anları, duraklama algoritması farkları, zaman damgası kayması ve çakışma çözümünün getireceği mimari karmaşıklığı ve hata riskini karşılamamaktadır. Kazanan kayıt tek başına korunur.
+
+### 5.4. Kaybeden Kaydın Durumu ve Cihaz Bağımsızlığı
+- Kaybeden kayıt fiziksel olarak silinmez; `is_duplicate = 1` olarak işaretlenir ve `duplicate_of_id = winner.id` ile kazanan kayda bağlanır.
+- Kaybeden kayıt değerlendirmeden, haftalık yükten, ayna ekranı barajından ve tüm istatistiki sayımlardan çıkarılır.
+- Cihaz bağımsızlığı esastır; kaynak adına göre beyaz liste veya WHOOP adını hedef alan hardcoded filtre yazılmaz.
+
+---
+
+## 6. Koşu Akıl Sağlığı Filtresi (Sanity Filter) Eşikleri
+
+- **Amaç:** Cihazların otomatik algılayıp "Koşu" olarak HealthKit'e yazdığı sıfır mesafeli ve adımsız uyku/istirahat seanslarını (ör. 2 saat 45 dk, 0 mesafe, 32 adım) hüküm hattından ayıklamak.
+- **Eşikler:** Mesafe $\le 50\text{ m}$ ve Süre $\ge 300\text{ sn}$ (5 dk) iken:
+  1. Ortalama kadans $< 60\text{ spm}$ ise, VEYA
+  2. Akış noktalarında koşan kadans ($\ge 60\text{ spm}$) hiç yoksa, VEYA
+  3. Kadans yokken ortalama nabız dinlenik düzeydeyse ($< 95\text{ bpm}$), VEYA
+  4. Süre $> 900\text{ sn}$ (15 dk) ve anlık hız ile kadans sıfır ise:
+  Aktivite `SUSPICIOUS_NON_RUN` kabul edilir; veritabanına `is_duplicate = 1` ve `duplicate_of_id = 'SUSPICIOUS_NON_RUN'` ile sessizce arşivlenir. Değerlendirme kuyruğuna alınmaz, sayımlara dahil edilmez.
+
+---
+
+## 7. Sessizlik Durumları Mesaj Tablosu ("Asla Boş Ekran")
+
+| Durum Kodu | Tetikleyici Koşul | Gösterilen Açıklama Cümlesi | Tek Eylem Düğmesi |
+|---|---|---|---|
+| `PERMISSION_MISSING` | HealthKit izni verilmedi | HealthKit okuma izni verilmedi. Koşularınızın analiz edilebilmesi için Apple Sağlık izinleri gereklidir. | [İzinleri İste] |
+| `NO_RUNS_FOUND` | Son 60 günde koşu bulunamadı | HealthKit arşivinizde koşu antrenmanı bulunamadı. Apple Watch ile koşu kaydettikten sonra tekrar senkronize edin. | [HealthKit'i Tara] |
+| `SERVER_UNREACHABLE` | Sunucuya ulaşılamadı / Ağ hatası | Sunucuya ulaşılamadı. Lütfen internet bağlantınızı kontrol edip tekrar deneyin. | [Yeniden Dene] |
+| `BELOW_DATA_THRESHOLD` | Tekil koşu < 16 veya mesafe < 100 km | {X} koşu bulundu, {Y} adedi çift kayıt olarak elendi ({Z} tekil). Ayna ekranı için 16 koşu gerekiyor. | [HealthKit'i Senkronize Et] |
+| `CALIBRATION_PENDING` | Soğuk başlangıç / Düşük güven | Kişisel fizyolojik eşikleriniz henüz kalibre edilmedi. Eforunuz geçici güvenlik referanslarıyla izleniyor. | [Konuşma Testi Çıpası Gir] |
+| `OBSERVATION_ONLY` | Yarış, aşırı kısa veya düşük güvenli sapma | Bu koşu yalnızca gözlem modunda kaydedildi; fizyolojik hüküm üretilmedi. | [Ayna Ekranını İncele] |
+| `SUSPICIOUS_NON_RUN` | Sıfır mesafe ve yetersiz kadans seansı | Şüpheli koşu dışı aktivite tespit edildi; sessizce arşivlendi. | [Gözat] |
