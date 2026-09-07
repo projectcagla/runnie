@@ -1,143 +1,118 @@
-# Runnie — Koşu Şiddeti Asistanı
+<div align="center">
 
-Orta seviye koşucular için koşu sonrası dürüstlük motoru: *"Bu koşu olması gereken şiddette miydi?"*
+# Runnie
 
----
+### *"Bu koşu olması gereken şiddette miydi?"*
 
-## 1. Sıfırdan Kurulum
+**Orta seviye koşucular için koşu sonrası fizyolojik dürüstlük motoru.**  
+Oyunlaştırma yok. Sosyal akış yok. Seri baskısı yok.  
+Yalnızca antrenman bittikten sonraki 3 dakika içinde gelen net, tavizsiz ve bilimsel bir cevap var.
 
-### 1.1. Sistem Gereksinimleri
-- **Node.js:** v22.0.0 veya üzeri (`node:sqlite` ve `--experimental-strip-types` desteği için zorunludur).
-- **macOS / iOS:** macOS 14+, Xcode 15+ (iOS 16.0+ hedefi).
-- **Harici Bağımlılıklar:** Sıfır (`package.json` içinde hiçbir harici npm paketi bulunmaz; doğrudan Node.js çekirdek modülleri kullanılır).
+<br/>
 
-### 1.2. Ortam Değişkenleri (`.env` veya Shell)
-İsteğe bağlı olarak aşağıdaki ortam değişkenleri ayarlanabilir:
-- `PORT`: HTTP sunucu portu (Varsayılan: `3000`).
-- `DB_PATH`: SQLite veritabanı dosya yolu (Varsayılan: `./data/runapp.sqlite`).
-- `AUTH_SECRET`: Dahili imzalama tuzu.
-- `TARGET_DELIVERY_SLA_SEC`: Bildirim gecikme hedefi (Varsayılan: `180` sn / 3 dakika).
+![Runnie Hero Showcase](assets/runnie_hero.png)
 
-### 1.3. Veritabanı Hazırlığı
-Ayrı bir migrasyon adımı gerekmez. Sunucu başlatıldığında `backend/src/db/database.ts`, `PRAGMA journal_mode = WAL;` ve `PRAGMA foreign_keys = ON;` ayarlarını açar ve `backend/src/db/schema.sql` dosyasını otomatik olarak işletir.
+<br/>
+
+</div>
 
 ---
 
-## 2. Sunucuyu Başlatma
+## 🏃 Neden Runnie?
 
-```bash
-node --experimental-strip-types backend/src/server.ts
-```
+### Ortopedik ve Aerobik Uyumsuzluk Tuzağı
+Koşuya başlayan veya derecelerini geliştirmek isteyen çoğu koşucunun sakatlanmasının ya da plato çizmesinin temel bir fizyolojik nedeni vardır:
 
-- **Ne yapar:** HTTP sunucusunu başlatır, SQLite veritabanını bağlar, şemayı kontrol eder ve dinlemeye geçer.
-- **Başarılı çıktı:**
-  ```text
-  [Koşu Şiddeti Asistanı Backend] Çalışıyor: http://localhost:3000
-  ```
-- **Başarısızlık çıktısı:**
-  - `EADDRINUSE`: Port 3000 dolu.
-  - `MODULE_NOT_FOUND` / `SyntaxError`: Node.js sürümü 22'den eski.
+> **Kalp ve damar sistemi 3–4 hafta içinde hissedilir bir güç kazanırken; kemik, tendon, kıkırdak ve fasya dokularının mekanik yüke uyum sağlaması 6 ila 9 ay sürer.**
 
----
+Koşucu kendini harika hisseder; bacakları hafif gelir. Ancak kolay (Zone 2) koşulması gereken günler, farkında olmadan biraz daha hızlı koşulur ve metabolik **"Gri Bölge"ye (Zone 3)** girilir. 
+- Yeterince sert olmadığı için kardiyovasküler kapasiteyi geliştirmez.
+- Yeterince yavaş olmadığı için bağ dokusu toparlanamaz.
+- Sonuç: Biriken ortopedik yorgunluk, tendon hasarları, kaval kemiği ağrıları (shin splints) ve aylar süren duraksama.
 
-## 3. iOS Projesini Açma ve Cihaza Yükleme
-
-1. **Xcode Projesi:**
-   - `ios/RunApp/` klasöründeki Swift dosyalarını (`RunApp.swift`, `ContentView.swift`, `SyncService.swift`) ve `ios/HealthKitReader/` dosyalarını (`HealthKitManager.swift`, `WorkoutNormalizer.swift`, `HealthKitTestView.swift`) yeni bir SwiftUI iOS projesine ekleyin.
-2. **HealthKit Yetkisi:**
-   - Xcode'da projenin **Signing & Capabilities** sekmesine gidin.
-   - **+ Capability** düğmesine basarak **HealthKit** yetkisini ekleyin ve **Clinical Health Records** dışındaki antrenman / sensör kutularını işaretleyin.
-   - Projenin `Info.plist` dosyasına şu anahtarı ekleyin:
-     - `Privacy - Health Share Usage Description`: *"Koşu şiddetinizi, aerobik eşiğinizi ve toparlanma maliyetinizi analiz etmek için antrenman verilerinize ihtiyaç duyulur."*
-3. **Fiziksel Cihaza Dağıtım:**
-   - iPhone'unuzu Mac'e bağlayın, geliştirici sertifikanızı seçin ve **Run (Cmd + R)** tuşuna basın. Uygulama ilk açıldığında HealthKit izin penceresi görüntülenecektir.
+**Runnie, sizi bu tuzaktan korumak için tasarlandı.** Saatinizdeki sensör verilerini alır, çevresel koşulları hesaba katar ve antrenmanınızın fizyolojik amacına sadık kalıp kalmadığını yüzünüze söyler.
 
 ---
 
-## 4. Örnek Veri Üreteci (Sentetik Hat Doğrulaması)
+## ✨ Temel Yetenekler
 
-Gerçek arşiv olmadan uçtan uca veri akışını sınamak için sentetik veri üreteci:
+<br/>
 
-```bash
-node --experimental-strip-types scripts/generate-synthetic-dataset.ts
-```
+![Runnie Özellikleri](assets/runnie_features.png)
 
-- **Ne yapar:** `data/synthetic_test_activities.json` dosyasına 6 farklı senaryoyu (kolay koşu, gri bölge sapması, sıcak hava beraati, interval tespiti ve mükerrer çift) temsil eden sentetik veriyi yazar.
-- **NOT:** Bu veri sentetiktir; yalnızca sunucu ve kuyruk hattını denemek içindir, ürün doğrulaması sayılamaz.
-- **Başarılı çıktı:**
-  ```text
-  ========================================================================
-  KOŞU ŞİDDETİ ASİSTANI — SENTETİK VERİ ÜRETECİ
-  ========================================================================
-  Hedef Dosya: .../data/synthetic_test_activities.json
-  Üretilen Aktivite Sayısı: 6
-  ...
-  ========================================================================
-  ```
-- **Başarısızlık çıktısı:** Dosya yazma hatası (`EACCES` veya `ENOENT`).
+<br/>
 
----
+### 1. Koşu Sonrası Dürüstlük Kartı (The Honesty Card)
+Koşunuz bittiği anda HealthKit üzerinden verileriniz akar ve 3 dakika içinde bildiriminiz gelir. LLM gevezeliği ya da genel geçer tavsiyeler yoktur; doğrudan deterministik şablonlardan üretilmiş dürüst Türkçe hüküm verilir:
+- **Plana Uygun:** Toparlanma koridorunda kalındı, bağ dokusu adaptasyonu desteklendi.
+- **Gri Bölge Sapması:** Kolay koşu farkında olmadan hızlandırıldı; toparlanma maliyeti gereksiz yükseldi.
+- **Eşik Aşımı:** Seans sert bir antrenmana dönüştü.
+- **Sınır Koridoru:** Fizyolojik belirsizlik alanında tamamlandı.
 
-## 5. Gerçek Apple Health Arşivini İnceleme (Keşif Betiği)
+### 2. Isı Beraati (Heat Acquittal Mechanism)
+Yazın $30^\circ\text{C}$ sıcaklıkta ve nemli havada koşarken nabzınızın yükselmesi eforunuzun disiplinsiz olduğu anlamına gelmez; kanın deriye pompalanması (kardiyak drift) doğal bir savunma mekanizmasıdır.
+- Runnie, koşunun yapıldığı saatteki hava durumunu Open-Meteo üzerinden sorgular.
+- Eğer sıcaklık ve nem yüksekken temponuzu yavaş tuttuysanız, nabzınız yükselse bile Runnie bunu bir ihlal saymaz: **"Isı Beraati"** verir.
+- Havanın cezasını koşucuya kesmez.
 
-```bash
-node --experimental-strip-types scripts/inspect-health-export.ts /path/to/apple_health_export
-```
+### 3. Dört Bölgeli Metabolik Dağılım
+Geleneksel saatlerin kaba "5 Bölge" ayrımı yerine fizyolojik gerçeğe sadık 4 bant takip edilir:
+1. **Kesin Kolay:** $AeT$ eşiğinin altı (Doku onarımı ve mitokondriyal yoğunluk bölgesi).
+2. **Belirsizlik Koridoru:** $AeT$ civarındaki bireysel hata payı aralığı.
+3. **Kesin Gri Bölge:** Kolay koşuları zehirleyen, toparlanmayı baltalayan efor.
+4. **Eşik Üstü:** Kaliteli antrenman veya yarış eforu.
 
-- **Ne yapar:** İki geçişli akışla XML dosyasını ve GPX rotalarını okur; bellek taşması olmadan 3 kademeli tempo dağılımını, nabız sıklığını, mükerrer kayıtları ve VO2max varlığını raporlar.
-- **Başarı Kriteri (Dört Kapı):**
-  1. *Anlık Tempo Kapsamı:* Açık alan koşularının en az **%80**'inde Kademe 1, 2 veya 3 anlık hız kaynağı bulunmalıdır.
-  2. *Nabız Kapsamı:* Koşuların en az **%85**'inde ortalama örnekleme aralığı $\le 10$ saniye olan nabız verisi bulunmalıdır.
-  3. *Fizyolojik Çıpa:* En az 1 adet VO2max kaydı VEYA konuşma testi çıpası bulunmalıdır.
-  4. *Mükerrerlik Oranı:* Çift antrenman oranı toplam antrenmanların **<%20**'si olmalıdır.
-- **Başarısızlık:** Yukarıdaki 4 orandan herhangi birinin baraj altında kalması durumunda mimari o kullanıcı arşivi için `CALIBRATION_PENDING` moduna geçer.
+### 4. Konuşma Testi Çıpası (Talk Test Anchor)
+Laboratuvarda kan laktat testi yaptırmamış koşucuların Aerobik Eşiğini ($AeT$) sabit yaş formülleriyle (220 - Yaş vb.) hesaplamak $\pm 15\text{ bpm}$ hata üretir.
+- Runnie, kolay bir koşudan sonra koşucuya tek bir soru sorar: *"Bu koşuda tam ve kesintisiz cümleler kurabiliyor muydunuz?"*
+- Bu yanıt, motorun eşik modelini doğrudan bireysel olarak kalibre eden sarsılmaz bir çıpa haline gelir.
 
----
+### 5. Akış İçi İnterval Tespiti
+Koşucu antrenman başlığına "Sabah Kolay Koşusu" yazmış olsa bile, akıştaki hız ve nabız patlamalarının varyansından seansın bir interval veya tempo koşusu olduğu otomatik anlaşılır. Yanıltıcı başlıklara kanmaz.
 
-## 6. Testler ve İddiaları
-
-Tüm testleri çalıştırmak için komut:
-
-```bash
-npm test
-```
-
-### 6.1. `tests/backend.test.ts`
-- **İddia 1 (Cihaz Kimlik Doğrulama):** Cihaz kaydında sunucunun en az 256-bit entropili bağımsız token ürettiğini, bu token ile oturum açılabildiğini, rastgele sahte token'ların `null` döndüğünü iddia eder.
-  - *Başarısızlık:* Sahte token ile oturum açılması veya üretilen token'ın $<64$ karakter olması.
-- **İddia 2 (Tekilleştirme):** Tekil kopyaların asla silinmediğini; mükerrer çiftte ise sensörsüz Strava kaydına karşı donanım Apple Watch kaydının korunduğunu iddia eder.
-  - *Başarısızlık:* Tek kopya aktivitenin elenmesi veya üçüncü taraf kaydın donanıma tercih edilmesi.
-- **İddia 3 (Hava Servisi Kesinliği):** Koordinat yokken servisin kesinlikle 20°C / %50 uydurmadığını, deterministik olarak `UNAVAILABLE` döndüğünü iddia eder.
-  - *Başarısızlık:* `res.status`'ün `AVAILABLE` çıkması veya varsayılan sayı dönmesi.
-- **İddia 4 (Unutulma Hakkı):** Kullanıcı silme isteğinde tüm kişisel ve antrenman verisinin fiziksel olarak silindiğini ve tuzlanmış denetim kaydının oluştuğunu iddia eder.
-  - *Başarısızlık:* Silinen kullanıcının tablolarda satırının kalması.
-- **İddia 5 (Uçtan Uca Değerlendirme):** Senkronize edilen aktivitenin iş kuyruğunda işlenip `assessments` tablosuna değişmez Türkçe hüküm yazdığını iddia eder.
-  - *Başarısızlık:* Değerlendirme cümlesinin boş kalması veya kuyruk durumunun `FAILED` olması.
-
-### 6.2. `tests/engine.test.ts`
-- **İddia:** Isınma kırpma penceresini, kadans kilitlenmesi tespitini, 4 bölgeli dağılımı ve ısı beraatini test eder.
-  - *Başarısızlık:* Isınma anındaki nabzın kolay koşuyu "aşırı efor" yapması veya sıcak havada korunan temponun azarlanması.
-
-### 6.3. `tests/thresholds.test.ts`
-- **İddia:** Daniels VDOT formülü, ampirik eşleme koridoru ve tepe nabız güvenlik tavanının ($HR_{max} \times 0.82$) doğruluğunu iddia eder.
-  - *Başarısızlık:* Eşik üstü tempoların ampirik AeT olarak onaylanması.
-
-### 6.4. `tests/appleHealthXmlParser.test.ts`
-- **İddia:** XML akışında HRV ve toparlanma nabızlarının elendiğini, iki işaretçili taramanın doğru en yakın komşuyu seçtiğini iddia eder.
-  - *Başarısızlık:* HRV değerlerinin nabız akışına sızması.
-
-### 6.5. `tests/textUtils.test.ts` ve `tests/forbiddenWords.test.ts`
-- **İddia:** Türkçe İ/ı normalizasyonunun kusursuz çalıştığını ve yasaklı tıbbi/biyolojik kelimelerin şablonlarda bulunmadığını iddia eder.
-  - *Başarısızlık:* Yasaklı kelime listesinden herhangi bir terimin motordan sızması.
+### 6. Ayna Ekranı (The Mirror Screen)
+Son 60 günde en az **16 koşu** ve **100 km** tamamlandığında açılır.
+- Nasihat etmez, puan vermez, azarlamaz.
+- Koşucunun önüne alışkanlıklarını ayna gibi koyar:
+  > *"Son 60 günde 18 koşunun %64'ü eşik üzerinde tamamlandı. Bu dağılım planlı bir maraton hazırlığı mı, yoksa toparlanma günlerinin farkında olmadan hızlanması mı?"*
 
 ---
 
-## 7. Komut Listesi ve Çıktı Kılavuzu
+## 🛡️ Runnie Neyi Yapmaz? (Felsefemiz)
 
-| Komut | Ne Yapar? | Başarılı Çıktı Örneği | Başarısızlık Göstergesi |
-| :--- | :--- | :--- | :--- |
-| `npm test` | Tüm birim ve entegrasyon testlerini Node test koşucusuyla yürütür | `ℹ tests 27`<br>`ℹ suites 0`<br>`ℹ pass 27`<br>`ℹ fail 0` | `✖ fail 1` veya daha fazla kırmızı test hatası |
-| `node --experimental-strip-types backend/src/server.ts` | Backend sunucusunu ve SQLite veritabanını başlatır | `[Koşu Şiddeti Asistanı Backend] Çalışıyor: http://localhost:3000` | Port çakışması (`EADDRINUSE`) veya veritabanı kilitlenmesi |
-| `curl -i http://localhost:3000/v1/health` | Backend sağlık kontrolü | `HTTP/1.1 200 OK`<br>`{"status":"healthy",...}` | `Connection refused` (Sunucu kapalı) |
-| `node --experimental-strip-types scripts/generate-synthetic-dataset.ts` | Test için sentetik koşu veri seti üretir | `Hedef Dosya: .../data/synthetic_test_activities.json`<br>`Üretilen Aktivite Sayısı: 6` | Dosya yazılamadı (`EACCES`) |
-| `node --experimental-strip-types scripts/inspect-health-export.ts <yol>` | Gerçek Apple Health XML dışa aktarımını inceler | 4 Kriter Özeti:<br>Anlık Hız: $\ge \%80$<br>Nabız Sıklığı: $\le 10$s<br>Fizyolojik Çıpa: $\ge 1$<br>Mükerrerlik: $<\%20$ | Kapsama oranlarının baraj altında kalması |
+| ❌ Piyasada Olanlar | ✅ Runnie Standartları |
+| :--- | :--- |
+| **Sosyal Akış & Beğeni** | Koşu kişisel bir disiplindir. Kimsenin "kudos"una veya onayına ihtiyaç duymazsınız. |
+| **Seri / Gün Sayacı Baskısı** | "Bugün de koşmalısın" demez. Bazen en iyi koşu, evde oturup dinlenmektir. |
+| **Sahte Bilim & Uydurma Terimler** | "Laktik asit birikti", "Yağ yakma modu", "Stres puanınız 84", "48 saat yatın" gibi biyolojik karşılığı olmayan terimler motorda kesin olarak yasaklanmıştır. |
+| **Konum & Mahalle Takibi** | Konumunuz asla kaydedilmez. Koordinat yalnızca anlık hava durumunu sorgulamak için belleğe alınır ve saniyeler içinde tamamen yok edilir. |
+| **Şifre ve Kayıt Sürtünmesi** | Cihaz tabanlı güvenli jeton mimarisiyle çalışır. E-posta onayları, şifreler, üçüncü taraf izin duvarları yoktur. |
+
+---
+
+## 📱 Ekran Görüntüleri ve Arayüz
+
+Runnie, göz yormayan derin karanlık mod (OLED Dark Mode) ve Apple tasarım çizgileriyle inşa edilmiştir.
+
+<br/>
+
+| Dürüstlük Kartı & Dağılım | Isı Beraati & Ayna Ekranı |
+| :---: | :---: |
+| <img src="assets/runnie_hero.png" width="450"/> | <img src="assets/runnie_features.png" width="450"/> |
+| *Son seansın fizyolojik maliyetini ve 4 bölgeli bant dağılımını gösteren ana arayüz.* | *Kilitli ekranda 3 dakikada beliren Isı Beraati bildirimi ve 60 günlük Ayna Ekranı.* |
+
+---
+
+## 🔬 Mimari ve Bilimsel Çerçeve
+
+- **İstemci:** Swift, SwiftUI, HealthKit (`HKWorkout`, `HKQuantityTypeIdentifierRunningSpeed`, `HKWorkoutRouteQuery`).
+- **Sunucu & Motor:** Node.js çekirdeği (`node:sqlite`, `node:crypto`, `node:http`). Harici hiçbir üçüncü taraf npm bağımlılığı barındırmaz.
+- **Düzeltilmiş Minetti Maliyeti:** Yokuş yukarı ve yokuş aşağı koşularda yerçekimi enerji maliyetini Minetti (2002) metabolik güç faktörüyle (GAP) hesaplar.
+- **Kadans Kilitlenmesi Filtresi:** Optik nabız sensörlerinin adım frekansıyla kilitlendiği ($|HR - CAD| \le 3\text{ bpm}$) sahte nabız anomalilerini tespit eder.
+- **Sürümlenmiş Eşikler:** Kalibrasyon değiştiğinde eski antrenmanlar sessizce manipüle edilmez; geriye dönük yeniden kalibre edildiği dürüstçe belirtilir.
+
+---
+
+<div align="center">
+  <sub>Runnie, kulüp koşucuları ve sakatlık döngüsünden çıkmak isteyen sporcular için geliştirilmiştir.</sub>
+</div>
