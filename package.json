@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "test": "node --experimental-strip-types --test tests/*.test.ts"
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "start": "node --experimental-strip-types backend/src/server.ts",
+    "dev": "node --experimental-strip-types backend/src/server.ts",
+    "tunnel": "npx untun tunnel http://localhost:3000"
   }
 }

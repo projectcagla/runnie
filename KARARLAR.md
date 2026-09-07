@@ -129,7 +129,28 @@ Bu doküman, kullanıcı tarafından devredilen yetki ve yapılan depo incelemes
 | `PERMISSION_MISSING` | HealthKit izni verilmedi | HealthKit okuma izni verilmedi. Koşularınızın analiz edilebilmesi için Apple Sağlık izinleri gereklidir. | [İzinleri İste] |
 | `NO_RUNS_FOUND` | Son 60 günde koşu bulunamadı | HealthKit arşivinizde koşu antrenmanı bulunamadı. Apple Watch ile koşu kaydettikten sonra tekrar senkronize edin. | [HealthKit'i Tara] |
 | `SERVER_UNREACHABLE` | Sunucuya ulaşılamadı / Ağ hatası | Sunucuya ulaşılamadı. Lütfen internet bağlantınızı kontrol edip tekrar deneyin. | [Yeniden Dene] |
-| `BELOW_DATA_THRESHOLD` | Tekil koşu < 16 veya mesafe < 100 km | {X} koşu bulundu, {Y} adedi çift kayıt olarak elendi ({Z} tekil). Ayna ekranı için 16 koşu gerekiyor. | [HealthKit'i Senkronize Et] |
+| `BELOW_DATA_THRESHOLD` | Sunucuya bağlanıldı ANCAK tekil koşu < 16 veya mesafe < 100 km | {X} koşu bulundu, {Y} adedi çift kayıt olarak elendi ({Z} tekil). Ayna ekranı için 16 koşu gerekiyor. | [HealthKit'i Senkronize Et] |
 | `CALIBRATION_PENDING` | Soğuk başlangıç / Düşük güven | Kişisel fizyolojik eşikleriniz henüz kalibre edilmedi. Eforunuz geçici güvenlik referanslarıyla izleniyor. | [Konuşma Testi Çıpası Gir] |
 | `OBSERVATION_ONLY` | Yarış, aşırı kısa veya düşük güvenli sapma | Bu koşu yalnızca gözlem modunda kaydedildi; fizyolojik hüküm üretilmedi. | [Ayna Ekranını İncele] |
 | `SUSPICIOUS_NON_RUN` | Sıfır mesafe ve yetersiz kadans seansı | Şüpheli koşu dışı aktivite tespit edildi; sessizce arşivlendi. | [Gözat] |
+
+---
+
+## 8. Mimari Değerlendirme: Motorun Konumu — Sunucu mu, Cihaz İçi mi (On-Device Swift)?
+
+Strava entegrasyonu tamamen kaldırılarak HealthKit doğrudan iOS uygulaması üzerinden okunduğu için, verinin üretim noktası artık bizzat cihazın kendisidir. Bu durum "Motor neden hâlâ sunucuda?" sorusunu haklı bir mimari gündem haline getirmiştir.
+
+### 8.1. Cihaz İçi (On-Device Swift / CoreData) Mimarisinin Güçlü Yönleri
+1. **Sıfır Ağ ve Altyapı Hataları:** TestFlight kullanıcılarının hücresel ağda (5G) `localhost`'a erişememesi, ATS güvenlik blokajları, tünel konfigürasyonları ve sunucu zaman aşımları tamamen ortadan kalkar.
+2. **Kusursuz Veri Gizliliği (Zero-Knowledge / Tam GDPR/KVKK Uyumu):** Hassas GPS rotaları, sağlık ve nabız verileri asla cihazın dışına çıkmaz. Sunucu güvenliği, veri sızıntısı veya şifrelenmiş depolama yükümlülükleri doğmaz.
+3. **Çevrimdışı (Offline-First) Özgürlük:** Koşucu doğada, dağda veya hücresel kapsama dışında koştuğunda bile antrenman bittiği anda 3 dakika içinde yerel bildirimini ve Dürüstlük Kartını görür.
+4. **Sıfır Operasyon Maliyeti:** Bulut sunucu, SQLite veritabanı bakımı, konteyner yönetimi ve ağ trafiği maliyeti sıfırlanır.
+
+### 8.2. Sunucu Mimarisi (Node.js / TypeScript) Neden v1.0 İçin Seçildi?
+1. **Hızlı Algoritmik İterasyon ve Katsayı Güncellemesi:** Fizyolojik modeller (Daniels $vVO2max$ katsayıları, Olbrecht AeT oranları, Minetti GAP eğrileri) henüz ampirik olgunlaşma aşamasındadır. Sunucu tarafında yapılan bir katsayı veya şablon düzeltmesi, Apple App Store inceleme sürecini (1-3 gün) beklemeden tek bir deploy ile anında tüm kullanıcılara yansır.
+2. **Kohort ve Sistematik Sapma Analizi (`SYSTEMATIC_COHORT_SHIFT`):** Kullanıcıların "Motor plana uygun dedi ama zorlandım" şeklindeki geriye dönük geri bildirimlerini çapraz tarayarak genel bir model yanlılığını tespit etmek merkezi bir veri tabanı gerektirir.
+3. **Hızlı Testlenebilirlik:** 33 kapsamlı birim testi Node.js ortamında 100 ms içinde koşturulabilmekte ve karmaşık akış algoritmaları hızla doğrulanabilmektedir.
+
+### 8.3. Stratejik Karar ve Geçiş Kriteri
+- **v1.0 (Doğrulama ve Kalibrasyon Fazı):** Motor mevcut sunucu mimarisinde kalacaktır. TestFlight erişilebilirliği `ServerSettingsView` üzerinden Cloudflare HTTPS tüneli veya LAN IP yapılandırmasıyla çözülmüştür. Bu fazda öncelik katsayıların ve tekilleştirme mantığının gerçek koşu arşivlerinde doğrulanmasıdır.
+- **v2.0 (On-Device Taşınma Fazı):** Algoritma ampirik kararlılığa ulaştığında, motor saf bir Swift paketine (`RunnieEngineKit`) dönüştürülerek doğrudan iOS hedefi içerisine entegre edilecek; sunucu bağımlılığı tamamen kaldırılarak tam çevrimdışı (on-device) mimariye geçilecektir.

@@ -68,3 +68,7 @@ Bu doküman, sistemin kodlama aşamasında varsayılan ancak **gerçek koşucu v
    - Açık havada GPS ile tempolu koşmayan kullanıcılarda Apple Watch VO2max üretmez. Bu kullanıcıların ilk konuşma testi etkileşimine katılım oranı izlenmelidir.
 3. **Fiziksel Cihazda APNs 180 Saniye Bildirim SLA'sı:**
    - Apple Push Notification servisinin kilitli ekranda koşu bittikten sonraki 3 dakika içinde fiziksel iPhone'a ulaştığı Apple Developer Gateway üzerinden canlı doğrulanmalıdır.
+4. **HealthKit 71 Koşu Kaydı Gizemi ve Kaynak Dağılımı:**
+   - Kullanıcının ~20 koşu (çift cihazla beklenen ~40 seans) beyanına karşın HealthKit sorgusunda 71 kayıt dönmüştür. Bu fazlalığın WHOOP otomatik algılamalarından mı, antrenman içi duraklama/parçalanmalardan mı yoksa üçüncü parti uygulamaların HealthKit'e yazdığı eski kayıtlardan mı kaynaklandığı canlı telemetride henüz kesinleştirilmemiştir. `DiagnosticsView` bu dökümü telefonda şeffaf olarak göstermek üzere inşa edilmiştir.
+5. **Gerçek Bulut ve 5G Ortamında Çift Cihaz Tekilleştirmesi:**
+   - Çift cihaz zaman örtüşmesi ve zenginlik puanlaması algoritmaları birim testlerinde doğrulanmış olsa da, TestFlight kullanıcısının 5G hücresel ağda `localhost`'a erişememesi nedeniyle gerçek 71 koşuluk havuz üzerinde henüz fiilen icra edilmemiştir. Tünel bağlantısı kurulduktan sonra sunucunun gerçek HealthKit veritabanı üzerindeki tekilleştirme performansı sahada izlenecektir.

@@ -113,6 +113,37 @@ Runnie, göz yormayan derin karanlık mod (OLED Dark Mode) ve Apple tasarım çi
 
 ---
 
+## 🚀 Kurulum ve Çalıştırma
+
+### 1. Yerel Geliştirme (Mac / Simülatör)
+```bash
+# Bağımlılık gerektirmez (Node.js 22+ yerel TypeScript ve SQLite kullanır)
+npm test     # 33 birim testi çalıştırır
+npm start    # Backend sunucusunu port 3000'de başlatır
+```
+
+### 2. TestFlight & Gerçek Cihaz Bağlantısı (5G / Hücresel Ağ)
+TestFlight üzerinden indirilen uygulama telefonunuzda hücresel ağdayken (5G/4G) bilgisayarınızdaki `localhost:3000` adresine doğrudan erişemez. Bunun için güvenli ve anında HTTPS tüneli sunulmuştur:
+
+1. **Sunucuyu Başlatın:**
+   ```bash
+   npm start
+   ```
+2. **Güvenli HTTPS Tünelini Açın:**
+   ```bash
+   npm run tunnel
+   ```
+   *Terminal ekranında anında geçerli bir SSL sertifikasına sahip Cloudflare HTTPS adresi belirecektir (Örn: `https://xxxx.trycloudflare.com`).*
+
+3. **Uygulamada Tanımlayın:**
+   - iPhone'unuzda **Runnie** uygulamasını açın.
+   - Sağ üst köşedeki **Ayarlar (⚙️)** simgesine dokunun.
+   - Kopyaladığınız HTTPS tünel adresini yapıştırın.
+   - **"Bağlantıyı Test Et"** düğmesine basarak sunucunun aktif olduğunu (200 OK) doğrulayın.
+   - **"Kaydet"** düğmesine dokunun.
+
+*Alternatif olarak, telefonunuz ve bilgisayarınız aynı Wi-Fi ağına bağlıysa Mac'inizin yerel IP adresini (`http://192.168.1.X:3000`) de kullanabilirsiniz (`NSAllowsLocalNetworking` izinlidir).*
+
 <div align="center">
   <sub>Runnie, kulüp koşucuları ve sakatlık döngüsünden çıkmak isteyen sporcular için geliştirilmiştir.</sub>
 </div>
