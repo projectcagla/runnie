@@ -57,6 +57,8 @@ Bu doküman, sistemin kodlama aşamasında varsayılan ancak **gerçek koşucu v
      - **Patika (Trail) Tespiti:** Mesafe bilinmediğinden km başına irtifa kazancı hesaplanamaz.
 3. **Tarihsel Çift Sayım Güvensizliği:**
    - Çift cihaz eşzamanlı takibindeki tekilleştirme hatası düzeltilmeden önce, hem Apple Watch hem WHOOP taşıyan kullanıcıların tüm koşuları veritabanında iki kez sayılmıştır. Bu nedenle önceki turlarda telemetride görülen koşu sayıları, haftalık antrenman yükleri ve hacim istatistikleri gerçeği yansıtmamaktadır ve güvenilmezdir.
+4. **Cihaz İçi Mimariye Geçiş ve Kohort Düzeyinde Sistematik Sapma Dedektörünün Bilinçli Askıya Alınması:**
+   - Build 7 ile harici sunucu bağımlılığı tamamen kaldırılmış; motor, SQLite ve bildirim yönetimi cihaz içine taşınmıştır. Bu mimari sadeleşmeyle birlikte, merkezi sunucuda birden fazla koşucunun geri bildirimlerini çaprazlayarak katsayı yanlılığını yakalayan `detectSystematicCohortShift` modülü bilinçli olarak askıya alınmıştır. Tek bir kullanıcının telefonundaki yerel SQLite veri tabanı kohort düzeyinde istatistik üretemez; bu nedenle sistem yanlılığı düzeltmesi bu fazda bireysel konuşma testi çıpalaması ve geriye dönük kullanıcı etiketlerine dayanmaktadır.
 
 ---
 
@@ -66,9 +68,9 @@ Bu doküman, sistemin kodlama aşamasında varsayılan ancak **gerçek koşucu v
    - Kod 3 kademeli hiyerarşi kurdu (`RunningSpeed` $\rightarrow$ `GPX` $\rightarrow$ `DistanceWalkingRunning`). Tipik kullanıcı dışa aktarımında `RunningSpeed` kayıtlarının kapsama oranının $\ge \%80$ olduğu gerçek bir arşivde gözlemlenmelidir.
 2. **Apple Watch VO2max Üretim Sıklığı:**
    - Açık havada GPS ile tempolu koşmayan kullanıcılarda Apple Watch VO2max üretmez. Bu kullanıcıların ilk konuşma testi etkileşimine katılım oranı izlenmelidir.
-3. **Fiziksel Cihazda APNs 180 Saniye Bildirim SLA'sı:**
-   - Apple Push Notification servisinin kilitli ekranda koşu bittikten sonraki 3 dakika içinde fiziksel iPhone'a ulaştığı Apple Developer Gateway üzerinden canlı doğrulanmalıdır.
+3. **Cihaz İçi Arka Plan Tetikleme ve Yerel Bildirim SLA'sı:**
+   - APNs ve harici sunucu bağımlılığı kaldırılarak yerel `UNNotificationRequest`'e geçilmiştir; böylece ağ kaynaklı bildirim kaybı riski bertaraf edilmiştir. Ancak iOS işletim sisteminin `HKObserverQuery` arka plan teslimatı tetikleme zamanlaması (özellikle telefon Düşük Güç Modundayken veya iOS arka plan kısıtlamaları altındayken) gerçek donanımda test edilmelidir.
 4. **HealthKit 71 Koşu Kaydı Gizemi ve Kaynak Dağılımı:**
    - Kullanıcının ~20 koşu (çift cihazla beklenen ~40 seans) beyanına karşın HealthKit sorgusunda 71 kayıt dönmüştür. Bu fazlalığın WHOOP otomatik algılamalarından mı, antrenman içi duraklama/parçalanmalardan mı yoksa üçüncü parti uygulamaların HealthKit'e yazdığı eski kayıtlardan mı kaynaklandığı canlı telemetride henüz kesinleştirilmemiştir. `DiagnosticsView` bu dökümü telefonda şeffaf olarak göstermek üzere inşa edilmiştir.
-5. **Gerçek Bulut ve 5G Ortamında Çift Cihaz Tekilleştirmesi:**
-   - Çift cihaz zaman örtüşmesi ve zenginlik puanlaması algoritmaları birim testlerinde doğrulanmış olsa da, TestFlight kullanıcısının 5G hücresel ağda `localhost`'a erişememesi nedeniyle gerçek 71 koşuluk havuz üzerinde henüz fiilen icra edilmemiştir. Tünel bağlantısı kurulduktan sonra sunucunun gerçek HealthKit veritabanı üzerindeki tekilleştirme performansı sahada izlenecektir.
+5. **Cihaz İçi 71 Koşuluk Havuzda Çift Cihaz Tekilleştirmesi:**
+   - Harici sunucu ve tünel bağlantısı engeli kalktığından, çift cihaz zaman örtüşmesi ve zenginlik puanlaması algoritmaları doğrudan iPhone üzerinde çalışan `WorkoutProcessor` tarafından gerçek 71 koşuluk HealthKit havuzu taranarak yürütülecektir. Tekilleştirmenin seans sayısını beklenen ~20 koşuya indirip indirmediği cihaz içi telemetri ekranında izlenecektir.

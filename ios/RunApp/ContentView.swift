@@ -2,14 +2,14 @@ import SwiftUI
 import HealthKit
 
 public struct ContentView: View {
-    @StateObject private var syncService = SyncService.shared
     @StateObject private var stateManager = AppStateManager.shared
-    
+    @StateObject private var processor = WorkoutProcessor.shared
+
     @State private var showTalkTestSheet = false
     @State private var showMirrorSheet = false
-    @State private var showServerSettings = false
     @State private var showDiagnosticsSheet = false
     @State private var showHKConsole = false
+    @State private var showPrivacyAlert = false
 
     public init() {}
 
@@ -19,46 +19,19 @@ public struct ContentView: View {
                 VStack(spacing: 20) {
                     // 1. Ana Dürüstlük Kartı (The Honesty Card)
                     honestyCard()
-                    
-                    // 1.1 Sunucu Bağlantı Uyarısı (Eğer ulaşılamadıysa direkt ayar yönlendirmesi)
-                    if case .serverUnreachable(let url, _) = stateManager.currentGate {
-                        HStack(spacing: 12) {
-                            Image(systemName: "wifi.exclamationmark")
-                                .foregroundColor(.orange)
-                                .font(.title3)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Sunucuya Bağlanılamadı")
-                                    .font(.footnote.bold())
-                                Text(url)
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                            }
-                            Spacer()
-                            Button("Ayarla") {
-                                showServerSettings = true
-                            }
-                            .font(.caption.bold())
-                            .buttonStyle(.borderedProminent)
-                            .tint(.orange)
-                        }
-                        .padding(12)
-                        .background(Color.orange.opacity(0.12))
-                        .cornerRadius(12)
-                        .padding(.horizontal)
-                    }
 
                     // 2. İşlem Düğmeleri
                     VStack(spacing: 12) {
                         Button(action: {
-                            Task { await syncAllWorkouts() }
+                            Task { await runLocalAnalysis() }
                         }) {
                             HStack {
                                 if stateManager.isSyncing {
                                     ProgressView().tint(.white).padding(.trailing, 6)
                                 } else {
-                                    Image(systemName: "arrow.triangle.2.circlepath")
+                                    Image(systemName: "cpu")
                                 }
-                                Text(stateManager.isSyncing ? "Senkronize Ediliyor..." : "HealthKit'i Senkronize Et")
+                                Text(stateManager.isSyncing ? "Cihazda Analiz Ediliyor..." : "HealthKit'i Analiz Et")
                                     .bold()
                             }
                             .frame(maxWidth: .infinity)
@@ -83,12 +56,7 @@ public struct ContentView: View {
                             }
 
                             Button(action: {
-                                Task {
-                                    if !stateManager.currentGate.isServerUnreachable {
-                                        stateManager.mirrorData = try? await syncService.fetchMirrorScreen()
-                                    }
-                                    showMirrorSheet = true
-                                }
+                                showMirrorSheet = true
                             }) {
                                 HStack {
                                     Image(systemName: "eyeglasses")
@@ -102,7 +70,7 @@ public struct ContentView: View {
                             }
                         }
 
-                        // 71 Antrenman Şeffaflık & Tanı Kartı
+                        // Tanı ve Veri İnceleme Kartı
                         Button(action: { showDiagnosticsSheet = true }) {
                             HStack {
                                 Image(systemName: "chart.pie.fill")
@@ -142,31 +110,54 @@ public struct ContentView: View {
                     }
                     .padding(.horizontal)
                     .padding(.top, 10)
+
+                    // 4. Gizlilik ve Cihaz İçi Saklama Notu
+                    VStack(spacing: 6) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "lock.shield.fill")
+                                .foregroundColor(.green)
+                            Text("Tamamen Cihaz İçi & Sıfır Ağ Çağrısı")
+                                .font(.caption2.bold())
+                                .foregroundColor(.secondary)
+                        }
+                        Text("Sağlık verileriniz telefonunuzdan hiç çıkmaz. Bütün motor yerel olarak çalışır.")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+
+                        Button("Verileri Cihazdan Tamamen Sil") {
+                            showPrivacyAlert = true
+                        }
+                        .font(.caption2)
+                        .foregroundColor(.red)
+                        .padding(.top, 4)
+                    }
+                    .padding(.top, 10)
+                    .padding(.horizontal)
                 }
                 .padding(.vertical)
             }
             .navigationTitle("Runnie")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { showServerSettings = true }) {
-                        Image(systemName: "gearshape")
-                    }
-                }
-            }
             .sheet(isPresented: $showTalkTestSheet) {
                 talkTestSheetView()
             }
             .sheet(isPresented: $showMirrorSheet) {
                 mirrorSheetView()
             }
-            .sheet(isPresented: $showServerSettings) {
-                ServerSettingsView()
-            }
             .sheet(isPresented: $showDiagnosticsSheet) {
                 DiagnosticsView()
             }
+            .alert("Tüm Yerel Veriler Silinsin mi?", isPresented: $showPrivacyAlert) {
+                Button("Vazgeç", role: .cancel) {}
+                Button("Tümünü Sil", role: .destructive) {
+                    RunnieDatabase.shared.deleteUserDataCompletely()
+                    Task { await runLocalAnalysis() }
+                }
+            } message: {
+                Text("Cihazda saklanan tüm geçmiş koşu, akış ve değerlendirme kayıtları SQLite veritabanından kalıcı olarak silinecektir.")
+            }
             .task {
-                await checkInitialStatus()
+                await runLocalAnalysis()
             }
         }
     }
@@ -189,7 +180,7 @@ public struct ContentView: View {
                 .foregroundColor(.primary)
                 .lineSpacing(4)
 
-            // Tek Eylem Düğmesi (Asla Boş Ekran Kuralı 3.4)
+            // Tek Eylem Düğmesi
             actionButtonForCurrentGate()
                 .padding(.top, 4)
 
@@ -238,7 +229,7 @@ public struct ContentView: View {
         switch gate {
         case .noPermission:
             Button(action: {
-                Task { await syncAllWorkouts() }
+                Task { await runLocalAnalysis() }
             }) {
                 Label(gate.actionTitle, systemImage: "lock.open.fill")
                     .font(.footnote.bold())
@@ -246,44 +237,14 @@ public struct ContentView: View {
             .buttonStyle(.borderedProminent)
             .tint(.red)
 
-        case .serverUnreachable:
-            HStack(spacing: 8) {
-                Button(action: {
-                    Task { await syncAllWorkouts() }
-                }) {
-                    Label(gate.actionTitle, systemImage: "arrow.clockwise")
-                        .font(.footnote.bold())
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.orange)
-
-                Button(action: {
-                    showServerSettings = true
-                }) {
-                    Label("Sunucu Ayarları", systemImage: "gearshape")
-                        .font(.footnote.bold())
-                }
-                .buttonStyle(.bordered)
-            }
-
         case .noRunsFound:
             Button(action: {
-                Task { await syncAllWorkouts() }
+                Task { await runLocalAnalysis() }
             }) {
                 Label(gate.actionTitle, systemImage: "magnifyingglass")
                     .font(.footnote.bold())
             }
             .buttonStyle(.borderedProminent)
-
-        case .unsyncedRuns:
-            Button(action: {
-                Task { await syncAllWorkouts() }
-            }) {
-                Label(gate.actionTitle, systemImage: "arrow.up.circle.fill")
-                    .font(.footnote.bold())
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.blue)
 
         case .calibrationPending:
             Button(action: { showTalkTestSheet = true }) {
@@ -304,7 +265,7 @@ public struct ContentView: View {
 
         case .belowDataThreshold:
             Button(action: {
-                Task { await syncAllWorkouts() }
+                Task { await runLocalAnalysis() }
             }) {
                 Label(gate.actionTitle, systemImage: "arrow.triangle.2.circlepath")
                     .font(.footnote.bold())
@@ -334,152 +295,11 @@ public struct ContentView: View {
         }
     }
 
-    // MARK: - Senkronizasyon ve Durum Yönetimi
-    private func checkInitialStatus() async {
-        do {
-            let workouts = try await HealthKitManager.shared.fetchRecentRunningWorkouts(days: 60, limit: HKObjectQueryNoLimit)
-            if workouts.isEmpty {
-                stateManager.setGate(.noRunsFound)
-            } else {
-                stateManager.setGate(.unsyncedRuns(count: workouts.count))
-                var d = stateManager.diagnostics
-                d.totalScannedWorkouts = workouts.count
-                stateManager.diagnostics = d
-            }
-        } catch {
-            // İzin henüz istenmemiş olabilir
-        }
-    }
-
-    private func syncAllWorkouts() async {
+    // MARK: - Cihaz İçi Analiz
+    private func runLocalAnalysis() async {
         stateManager.isSyncing = true
         defer { stateManager.isSyncing = false }
-        
-        do {
-            let authorized = try await HealthKitManager.shared.requestAuthorization()
-            guard authorized else {
-                stateManager.setGate(.noPermission)
-                return
-            }
-
-            // 60 günlük tam pencere ve limitsiz sorgu
-            let workouts = try await HealthKitManager.shared.fetchRecentRunningWorkouts(days: 60, limit: HKObjectQueryNoLimit)
-            guard !workouts.isEmpty else {
-                stateManager.setGate(.noRunsFound)
-                return
-            }
-
-            var payloads: [NormalizedActivityPayload] = []
-            var totalDistanceMeters = 0.0
-            
-            for w in workouts {
-                let dist = w.totalDistance?.doubleValue(for: .meter()) ?? 0
-                totalDistanceMeters += dist
-                
-                // Temel mantık filtresi: 0 metre ve aşırı kısa kayıtları ele
-                if dist < 50 && w.duration < 60 {
-                    continue
-                }
-
-                let hr = (try? await HealthKitManager.shared.fetchHeartRateSamples(for: w)) ?? []
-                let steps = (try? await HealthKitManager.shared.fetchStepSamples(for: w)) ?? []
-                let speeds = (try? await HealthKitManager.shared.fetchRunningSpeedSamples(for: w)) ?? []
-                let route = (try? await HealthKitManager.shared.fetchRouteLocations(for: w)) ?? []
-
-                let payload = WorkoutNormalizer.normalize(
-                    workout: w,
-                    hrSamples: hr,
-                    stepSamples: steps,
-                    speedSamples: speeds,
-                    routeLocations: route
-                )
-                payloads.append(payload)
-            }
-
-            // Sunucu Senkronizasyonu
-            let syncResults = try await syncService.syncWorkouts(payloads)
-
-            var duplicateCount = 0
-            var keptResults: [[String: Any]] = []
-            for res in syncResults {
-                if let dedup = res["deduplication"] as? [String: Any],
-                   let action = dedup["action"] as? String,
-                   action == "MARK_DUPLICATE" {
-                    duplicateCount += 1
-                } else {
-                    keptResults.append(res)
-                }
-            }
-
-            let totalFound = workouts.count
-            let uniqueCount = max(0, totalFound - duplicateCount)
-            let totalKm = totalDistanceMeters / 1000.0
-
-            var d = stateManager.diagnostics
-            d.totalScannedWorkouts = totalFound
-            d.duplicatesEliminatedCount = duplicateCount
-            d.netUniqueRuns = uniqueCount
-            d.totalKm = totalKm
-            stateManager.diagnostics = d
-
-            // En son tekil (kazanan) koşunun değerlendirmesini çek
-            var assessmentAssigned = false
-            if let winnerAct = keptResults.first, let actId = winnerAct["activityId"] as? String {
-                try await Task.sleep(nanoseconds: 300_000_000)
-                if let asmt = try await syncService.fetchAssessment(activityId: actId) {
-                    let sentence = (asmt["sentence"] as? String) ?? "Değerlendirme üretildi."
-                    let verdict = (asmt["verdict"] as? String) ?? "TAMAM"
-                    var easyP = 0.0
-                    var modP = 0.0
-                    var thrP = 0.0
-                    if let metrics = asmt["metrics"] as? [String: Any] {
-                        easyP = (metrics["easyPct"] as? Double) ?? 0.0
-                        modP = (metrics["moderatePct"] as? Double) ?? 0.0
-                        thrP = (metrics["thresholdPct"] as? Double) ?? 0.0
-                    }
-
-                    let asmtData = AssessmentData(
-                        activityId: actId,
-                        verdict: verdict,
-                        sentence: sentence,
-                        easyPct: easyP,
-                        moderatePct: modP,
-                        thresholdPct: thrP
-                    )
-
-                    if verdict == "CALIBRATION_PENDING" {
-                        stateManager.setGate(.calibrationPending)
-                        assessmentAssigned = true
-                    } else if verdict == "OBSERVATION_ONLY" {
-                        stateManager.setGate(.observationOnly)
-                        assessmentAssigned = true
-                    } else if uniqueCount < 16 || totalKm < 100.0 {
-                        stateManager.setGate(.belowDataThreshold(found: totalFound, duplicates: duplicateCount, unique: uniqueCount, totalDistanceKm: totalKm))
-                        assessmentAssigned = true
-                    } else {
-                        stateManager.setGate(.ready(assessment: asmtData))
-                        assessmentAssigned = true
-                    }
-                }
-            }
-
-            if !assessmentAssigned {
-                if uniqueCount < 16 || totalKm < 100.0 {
-                    stateManager.setGate(.belowDataThreshold(found: totalFound, duplicates: duplicateCount, unique: uniqueCount, totalDistanceKm: totalKm))
-                } else {
-                    let fallback = AssessmentData(activityId: "unknown", verdict: "ACCORDING_TO_PLAN", sentence: "Tüm koşular senkronize edildi.", easyPct: 80, moderatePct: 15, thresholdPct: 5)
-                    stateManager.setGate(.ready(assessment: fallback))
-                }
-            }
-
-            // Ayna Ekranı Verisini Çek
-            stateManager.mirrorData = try? await syncService.fetchMirrorScreen()
-
-        } catch {
-            // Sunucuya ulaşılamadı: En üst öncelikli hata kapısı
-            stateManager.setGate(.serverUnreachable(url: syncService.serverBaseUrl, underlyingError: error.localizedDescription))
-            stateManager.mirrorData = nil
-        }
+        try? await processor.processAllWorkouts()
     }
 
     // MARK: - Konuşma Testi Çıpası Sheet
@@ -488,7 +308,7 @@ public struct ContentView: View {
             VStack(spacing: 20) {
                 Text("Konuşma Testi Çıpası")
                     .font(.headline)
-                Text("Son kolay koşunuzda rahatça tam cümleler kurabildiğiniz nabzı girin. Bu sayı motorun kişisel AeT eşiği için doğrudan kalibrasyon çıpası olur.")
+                Text("Son kolay koşunuzda rahatça tam cümleler kurabildiğiniz nabzı girin. Bu sayı cihazınızdaki motorun kişisel AeT eşiği için doğrudan kalibrasyon çıpası olur.")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -496,9 +316,8 @@ public struct ContentView: View {
 
                 StatefulHrInput { hr in
                     Task {
-                        _ = try? await syncService.submitTalkTestAnchor(aetHr: hr)
+                        await processor.submitTalkTestAnchor(aetHr: hr)
                         showTalkTestSheet = false
-                        await syncAllWorkouts()
                     }
                 }
                 Spacer()
@@ -513,7 +332,7 @@ public struct ContentView: View {
         }
     }
 
-    // MARK: - Ayna Ekranı Sheet (Problem 1 ve Problem 4 Düzeltmesi)
+    // MARK: - Ayna Ekranı Sheet
     private func mirrorSheetView() -> some View {
         NavigationView {
             ZStack {
@@ -522,42 +341,7 @@ public struct ContentView: View {
 
                 ScrollView {
                     VStack(spacing: 16) {
-                        // Eğer sunucuya ulaşılamadıysa asla 'yetersiz veri' denmez
-                        if case .serverUnreachable = stateManager.currentGate {
-                            VStack(spacing: 16) {
-                                Image(systemName: "wifi.exclamationmark")
-                                    .font(.system(size: 44))
-                                    .foregroundColor(.orange)
-                                    .padding(.top, 20)
-
-                                Text("Sunucuya Ulaşılamadı")
-                                    .font(.title3.bold())
-
-                                Text(stateManager.mirrorScreenNotice)
-                                    .font(.body)
-                                    .foregroundColor(.secondary)
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal)
-
-                                Button(action: {
-                                    showMirrorSheet = false
-                                    showServerSettings = true
-                                }) {
-                                    Label("Sunucu Ayarlarını Düzenle", systemImage: "gearshape")
-                                        .font(.subheadline.bold())
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .tint(.orange)
-                                .padding(.top, 8)
-                            }
-                            .padding(20)
-                            .frame(maxWidth: .infinity)
-                            .background(Color(.secondarySystemGroupedBackground))
-                            .cornerRadius(16)
-                            .padding(.horizontal)
-
-                        } else if let m = stateManager.mirrorData, let eligible = m["eligible"] as? Bool, eligible {
-                            // Ayna Soruları
+                        if let m = stateManager.mirrorData, let eligible = m["eligible"] as? Bool, eligible {
                             let runs = (m["totalRuns"] as? Int) ?? 0
                             let dist = (m["totalDistanceKm"] as? Double) ?? 0.0
 
@@ -599,7 +383,6 @@ public struct ContentView: View {
                             .padding(.horizontal)
 
                         } else {
-                            // Durum Hiyerarşisine Uygun Bilgilendirme Kartı
                             VStack(spacing: 16) {
                                 Image(systemName: "eyeglasses")
                                     .font(.system(size: 40))

@@ -104,8 +104,9 @@ Runnie, göz yormayan derin karanlık mod (OLED Dark Mode) ve Apple tasarım çi
 
 ## 🔬 Mimari ve Bilimsel Çerçeve
 
-- **İstemci:** Swift, SwiftUI, HealthKit (`HKWorkout`, `HKQuantityTypeIdentifierRunningSpeed`, `HKWorkoutRouteQuery`).
-- **Sunucu & Motor:** Node.js çekirdeği (`node:sqlite`, `node:crypto`, `node:http`). Harici hiçbir üçüncü taraf npm bağımlılığı barındırmaz.
+- **Uygulama Mimarisi (Tam Çevrimdışı / On-Device):** Swift, SwiftUI, HealthKit (`HKWorkout`, `HKQuantityTypeIdentifierRunningSpeed`, `HKWorkoutRouteQuery`), yerel SQLite (`Database.swift`), yerel bildirim (`UNUserNotificationCenter`).
+- **Sıfır Sunucu Bağımlılığı:** Harici backend sunucusuna veya tünel bağlantısına ihtiyaç duymaz. HealthKit arka plan teslimatı (`HKObserverQuery`) ile antrenman bittiği an telefon arka planda uyanır, çift cihaz tekilleştirmesini ve eşik analizini yapar, Open-Meteo REST servisiyle geçici (ephemeral) koordinat üzerinden hava durumunu alır ve 3 dakika içinde yerel dürüstlük bildirimini sunar.
+- **Referans Doğrulama & Gelecek Kohort Analizi (`backend/`, `tests/`):** Repoda bulunan TypeScript motoru ve test hattı (`tests/`), 130 MB'lık `export.xml` parser'ını ve bilimsel altın test fikstürlerini (`golden_fixtures.json`) denetleyen referans doğrulama hattı olarak korunmaktadır. Çok kullanıcılı merkezi kohort analizi ileride gerektiğinde bu altyapı üzerinden devreye alınacaktır.
 - **Düzeltilmiş Minetti Maliyeti:** Yokuş yukarı ve yokuş aşağı koşularda yerçekimi enerji maliyetini Minetti (2002) metabolik güç faktörüyle (GAP) hesaplar.
 - **Kadans Kilitlenmesi Çift Sinyali:** Sensör kilitlenmesini hem adım yakınlığı ($|HR - CAD| \le 2$) hem de varyans çöküşü ($\sigma(HR) \le 1.2\text{ bpm}$) ile doğrular; doğal ritimleri korur.
 - **Aerobik Ayrışma (Decoupling) Koruması:** Kolay koşuda hız sabitken nabzın $>\%5$ sürüklendiği gizli eforları yakalar.
@@ -115,34 +116,19 @@ Runnie, göz yormayan derin karanlık mod (OLED Dark Mode) ve Apple tasarım çi
 
 ## 🚀 Kurulum ve Çalıştırma
 
-### 1. Yerel Geliştirme (Mac / Simülatör)
+### 1. iOS Uygulaması (Xcode / Gerçek Cihaz / Simülatör)
+Uygulama harici bir sunucuya ihtiyaç duymadan tamamen cihaz üzerinde çalışır:
+1. `ios/RunApp.xcodeproj` projesini Xcode ile açın.
+2. Hedef olarak fiziksel iPhone'unuzu veya bir iOS Simülatörü seçin.
+3. **Run (`Cmd + R`)** düğmesine basarak doğrudan derleyin ve çalıştırın.
+4. Sunucu başlatma, Cloudflare tüneli açma veya IP adresi girme adımları tamamen kaldırılmıştır.
+
+### 2. Algoritmik Doğrulama & Parite Test Hattı
+TypeScript referans motorunu ve altın test fikstürlerini denetlemek için:
 ```bash
 # Bağımlılık gerektirmez (Node.js 22+ yerel TypeScript ve SQLite kullanır)
-npm test     # 33 birim testi çalıştırır
-npm start    # Backend sunucusunu port 3000'de başlatır
+npm test     # 34 birim testini ve Swift motor parite fikstürlerini doğrular
 ```
-
-### 2. TestFlight & Gerçek Cihaz Bağlantısı (5G / Hücresel Ağ)
-TestFlight üzerinden indirilen uygulama telefonunuzda hücresel ağdayken (5G/4G) bilgisayarınızdaki `localhost:3000` adresine doğrudan erişemez. Bunun için güvenli ve anında HTTPS tüneli sunulmuştur:
-
-1. **Sunucuyu Başlatın:**
-   ```bash
-   npm start
-   ```
-2. **Güvenli HTTPS Tünelini Açın:**
-   ```bash
-   npm run tunnel
-   ```
-   *Terminal ekranında anında geçerli bir SSL sertifikasına sahip Cloudflare HTTPS adresi belirecektir (Örn: `https://xxxx.trycloudflare.com`).*
-
-3. **Uygulamada Tanımlayın:**
-   - iPhone'unuzda **Runnie** uygulamasını açın.
-   - Sağ üst köşedeki **Ayarlar (⚙️)** simgesine dokunun.
-   - Kopyaladığınız HTTPS tünel adresini yapıştırın.
-   - **"Bağlantıyı Test Et"** düğmesine basarak sunucunun aktif olduğunu (200 OK) doğrulayın.
-   - **"Kaydet"** düğmesine dokunun.
-
-*Alternatif olarak, telefonunuz ve bilgisayarınız aynı Wi-Fi ağına bağlıysa Mac'inizin yerel IP adresini (`http://192.168.1.X:3000`) de kullanabilirsiniz (`NSAllowsLocalNetworking` izinlidir).*
 
 <div align="center">
   <sub>Runnie, kulüp koşucuları ve sakatlık döngüsünden çıkmak isteyen sporcular için geliştirilmiştir.</sub>

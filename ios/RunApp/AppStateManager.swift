@@ -5,21 +5,15 @@ import HealthKit
 /**
  * Runnie Durum Hiyerarşisi (State Priority Gates)
  * En üstteki kapı açılmadan altındaki durumlar asla aktifleşemez.
+ * Cihaz içi mimaride sunucu/bağlantı durumları kaldırılmıştır.
  */
 public enum AppGate: Equatable {
     case noPermission
     case noRunsFound
-    case serverUnreachable(url: String, underlyingError: String)
-    case unsyncedRuns(count: Int)
     case belowDataThreshold(found: Int, duplicates: Int, unique: Int, totalDistanceKm: Double)
     case calibrationPending
     case observationOnly
     case ready(assessment: AssessmentData)
-
-    public var isServerUnreachable: Bool {
-        if case .serverUnreachable = self { return true }
-        return false
-    }
 
     public var isNoPermission: Bool {
         if case .noPermission = self { return true }
@@ -36,16 +30,19 @@ public enum AppGate: Equatable {
         return false
     }
 
+    public var isReady: Bool {
+        if case .ready = self { return true }
+        return false
+    }
+
     public var priorityIndex: Int {
         switch self {
         case .noPermission: return 1
         case .noRunsFound: return 2
-        case .serverUnreachable: return 3
-        case .unsyncedRuns: return 4
-        case .belowDataThreshold: return 5
-        case .calibrationPending: return 6
-        case .observationOnly: return 7
-        case .ready: return 8
+        case .belowDataThreshold: return 3
+        case .calibrationPending: return 4
+        case .observationOnly: return 5
+        case .ready: return 6
         }
     }
 
@@ -53,8 +50,6 @@ public enum AppGate: Equatable {
         switch self {
         case .noPermission: return "İZİN GEREKLİ"
         case .noRunsFound: return "KAYIT YOK"
-        case .serverUnreachable: return "BAĞLANTI HATASI"
-        case .unsyncedRuns: return "SENKRONİZASYON BEKLİYOR"
         case .belowDataThreshold: return "YETERSİZ VERİ"
         case .calibrationPending: return "KALİBRASYON BEKLİYOR"
         case .observationOnly: return "GÖZLEM MODU"
@@ -66,8 +61,6 @@ public enum AppGate: Equatable {
         switch self {
         case .noPermission: return .red
         case .noRunsFound: return .gray
-        case .serverUnreachable: return .orange
-        case .unsyncedRuns: return .blue
         case .belowDataThreshold: return .purple
         case .calibrationPending: return .purple
         case .observationOnly: return .gray
@@ -80,11 +73,7 @@ public enum AppGate: Equatable {
         case .noPermission:
             return "HealthKit okuma izni verilmedi. Koşularınızın analiz edilebilmesi için Apple Sağlık izinleri gereklidir."
         case .noRunsFound:
-            return "HealthKit arşivinizde son 60 güne ait koşu antrenmanı bulunamadı. Apple Watch ile koşu kaydettikten sonra tekrar senkronize edin."
-        case .serverUnreachable(let url, _):
-            return "Sunucuya ulaşılamadı (\(url)). Lütfen sunucu adresinizi kontrol edip tekrar deneyin."
-        case .unsyncedRuns(let count):
-            return "Cihazınızda \(count) koşu bulundu. Şiddet analizi ve çift kayıt temizliği için sunucuya aktarılmayı bekliyor."
+            return "HealthKit arşivinizde son 60 güne ait koşu antrenmanı bulunamadı. Apple Watch ile koşu kaydettikten sonra tekrar analiz edin."
         case .belowDataThreshold(let found, let dups, let unique, let km):
             return "Ayna ekranı ve güvenilir temel profil için en az 16 tekil koşu ve 100 km gereklidir. (Arşiv: \(found) koşu, \(dups) çift elendi, \(unique) tekil, \(String(format: "%.1f", km)) km)"
         case .calibrationPending:
@@ -100,12 +89,10 @@ public enum AppGate: Equatable {
         switch self {
         case .noPermission: return "İzinleri İste"
         case .noRunsFound: return "HealthKit'i Tara"
-        case .serverUnreachable: return "Yeniden Dene"
-        case .unsyncedRuns: return "Sunucuya Gönder"
-        case .belowDataThreshold: return "Yeniden Senkronize Et"
+        case .belowDataThreshold: return "Yeniden Analiz Et"
         case .calibrationPending: return "Konuşma Çıpası Gir"
         case .observationOnly: return "Ayna Ekranını İncele"
-        case .ready: return "HealthKit'i Senkronize Et"
+        case .ready: return "HealthKit'i Analiz Et"
         }
     }
 
@@ -113,10 +100,6 @@ public enum AppGate: Equatable {
         switch (lhs, rhs) {
         case (.noPermission, .noPermission): return true
         case (.noRunsFound, .noRunsFound): return true
-        case (.serverUnreachable(let u1, let e1), .serverUnreachable(let u2, let e2)):
-            return u1 == u2 && e1 == e2
-        case (.unsyncedRuns(let c1), .unsyncedRuns(let c2)):
-            return c1 == c2
         case (.belowDataThreshold(let f1, let d1, let u1, let k1), .belowDataThreshold(let f2, let d2, let u2, let k2)):
             return f1 == f2 && d1 == d2 && u1 == u2 && abs(k1 - k2) < 0.01
         case (.calibrationPending, .calibrationPending): return true
@@ -217,7 +200,7 @@ public struct DiagnosticsState {
 public final class AppStateManager: ObservableObject {
     public static let shared = AppStateManager()
 
-    @Published public var currentGate: AppGate = .unsyncedRuns(count: 0)
+    @Published public var currentGate: AppGate = .noRunsFound
     @Published public var diagnostics: DiagnosticsState = DiagnosticsState()
     @Published public var mirrorData: [String: Any]? = nil
     @Published public var isSyncing: Bool = false
@@ -230,7 +213,7 @@ public final class AppStateManager: ObservableObject {
 
     /**
      * Ayna Ekranı İçin Durum Bilgilendirme Metni
-     * Sunucuya ulaşılamadıysa ASLA 'yetersiz veri' denemez.
+     * Cihaz içi mimaride tek kaynaktan okunur; çelişki imkansızdır.
      */
     public var mirrorScreenNotice: String {
         switch currentGate {
@@ -238,15 +221,6 @@ public final class AppStateManager: ObservableObject {
             return "HealthKit okuma izni verilmediği için koşularınıza ulaşılamadı."
         case .noRunsFound:
             return "Cihazınızda son 60 güne ait koşu antrenmanı bulunmuyor."
-        case .serverUnreachable:
-            let count = diagnostics.totalScannedWorkouts
-            if count > 0 {
-                return "Sunucuya ulaşamadığım için \(count) koşunun hiçbirini henüz işleyemedim.\nLütfen sunucu bağlantınızı kontrol edin."
-            } else {
-                return "Sunucuya ulaşamadığım için koşuları henüz işleyemedim.\nLütfen sunucu bağlantınızı kontrol edin."
-            }
-        case .unsyncedRuns(let count):
-            return "Cihazda \(count) koşu bulundu fakat henüz sunucuya aktarılmadı. Lütfen ana ekrandan HealthKit'i Senkronize Edin."
         case .belowDataThreshold(_, _, let unique, let km):
             return "Yetersiz veri. Son 60 günde en az 16 tekil koşu ve 100 km gereklidir.\n(Şu ana kadar: \(unique) tekil koşu, \(String(format: "%.1f", km)) km)"
         case .calibrationPending:

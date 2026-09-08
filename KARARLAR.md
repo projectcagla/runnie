@@ -152,5 +152,30 @@ Strava entegrasyonu tamamen kaldırılarak HealthKit doğrudan iOS uygulaması �
 3. **Hızlı Testlenebilirlik:** 33 kapsamlı birim testi Node.js ortamında 100 ms içinde koşturulabilmekte ve karmaşık akış algoritmaları hızla doğrulanabilmektedir.
 
 ### 8.3. Stratejik Karar ve Geçiş Kriteri
-- **v1.0 (Doğrulama ve Kalibrasyon Fazı):** Motor mevcut sunucu mimarisinde kalacaktır. TestFlight erişilebilirliği `ServerSettingsView` üzerinden Cloudflare HTTPS tüneli veya LAN IP yapılandırmasıyla çözülmüştür. Bu fazda öncelik katsayıların ve tekilleştirme mantığının gerçek koşu arşivlerinde doğrulanmasıdır.
-- **v2.0 (On-Device Taşınma Fazı):** Algoritma ampirik kararlılığa ulaştığında, motor saf bir Swift paketine (`RunnieEngineKit`) dönüştürülerek doğrudan iOS hedefi içerisine entegre edilecek; sunucu bağımlılığı tamamen kaldırılarak tam çevrimdışı (on-device) mimariye geçilecektir.
+- **v1.0 (Doğrulama ve Kalibrasyon Fazı):** İlk testlerde sunucu kullanılmış, ancak Build 7 ile doğrudan tam çevrimdışı cihaza taşınmıştır.
+
+---
+
+## 9. Dokuzuncu Karar: Cihaz İçi (On-Device) Mimariye Geçiş ve Sıfır-Sunucu Kararı (Build 7)
+
+### 9.1. Gerekçe ve Değişen Şartlar
+1. **Strava Webhook Zorunluluğu Kalktı:** Strava entegrasyonu dördüncü turda projeden tamamen çıkarıldığı için harici bir sunucunun internete açık bir webhook dinleme ihtiyacı son buldu.
+2. **Bildirim SLA'sı ve Ağ Sürtünmesi:** APNs sunucu bildirimleri hem geliştirici sertifikası/anahtarı gerektirmekte hem de hücresel ağda gecikmelere sebep olmaktaydı. `HKObserverQuery` ile arka plan teslimatı (`enableBackgroundDelivery(for: .workout(), frequency: .immediate)`) antrenman HealthKit'e kaydedildiği anda uygulamayı uyandırır; `UNNotificationRequest` ile yerel bildirim sıfır ağ gecikmesiyle 3 dakikalık SLA içinde telefona düşer.
+3. **Deterministik Hesaplama Gücü:** Eşik türetme, Minetti GAP metabolik güç katsayısı, aerobik ayrışma ve hüküm motoru saf matematiksel hesaplamalardır; modern bir iPhone işlemcisinde mikrosaniyeler mertebesinde tamamlanır.
+4. **Hava Durumu ve Gizlilik:** Open-Meteo REST sorgusu doğrudan telefondan atılır. Konum gizliliği ilkesi gereği koordinatlar asla diske veya yerel SQLite'a kaydedilmez; bellekte geçici (ephemeral) tutulup hava verisi çekildikten hemen sonra bellekten silinir.
+5. **Kullanıcı Engellerinin Kaldırılması:** Kullanıcının tünel açması, yerel IP yapılandırması veya sunucu sağlık kontrolleriyle uğraşması ihtiyacı ortadan kaldırılmıştır.
+
+### 9.2. Doğrulama Hattı Tercihi: Seçenek B (Çift Motor & Golden Fixtures)
+Cihaz içi mimariye geçişte iki seçenek değerlendirilmiştir:
+- *Seçenek A:* Tek motor (Swift). Parser Swift'e taşınır, TypeScript motoru silinir.
+- *Seçenek B (Seçilen):* Çift motor. TypeScript motoru ve 34 birim testten oluşan kapsamlı `export.xml` zemin gerçeği doğrulama hattı korunur. Swift motoru, üretilen altın test fikstürleri (`tests/fixtures/golden_fixtures.json`) üzerinden TypeScript motoruna kilitlenir.
+
+**Gerekçe:** 130 MB'lık gerçek Apple Health dışa aktarım dosyalarını ve 3 kademeli hız önceliklendirmesini test eden mevcut test altyapısı korunmuş; Swift motorunun TypeScript referansıyla 9 kritik senaryonun tamamında (karar tipi, şablon ID, metin çıktısı, güven skoru, katsayılar) %100 parite sağladığı doğrulanmıştır.
+
+### 9.3. Mimari Kazanımlar ve Verilen Ödünler
+- **Kazanımlar:**
+  - Sıfır sunucu işletim maliyeti ve sıfır dış bağımlılık.
+  - Uçak modunda veya hücresel veri kapalıyken dahi eksiksiz çalışabilen yerel SQLite (`Database.swift`) tabanlı arşiv.
+  - Basitleştirilmiş durum makinesi (`AppStateManager.swift`): `serverUnreachable` ve `unsyncedRuns` durumları kaldırılarak yalnızca biyolojik veri durumları (`noPermission`, `noRunsFound`, `belowDataThreshold`, `calibrationPending`, `observationOnly`, `ready`) muhafaza edilmiştir.
+- **Verilen Ödün (Bilinçli Askıya Alma):**
+  - **Merkezi Kohort Sapma Dedektörü (`detectSystematicCohortShift`):** Sunucu üzerinde birden fazla kullanıcının geri bildirimlerini çapraz tarayarak popülasyon model yanlılığını tespit eden modül, tek cihazlı yerel mimaride çalışamayacağı için askıya alınmıştır. İleride çok kullanıcılı federatif analiz ihtiyacı doğduğunda `backend/` dizinindeki altyapı devreye alınabilir.

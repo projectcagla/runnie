@@ -256,4 +256,21 @@ public final class HealthKitManager {
             healthStore.execute(query)
         }
     }
+
+    /**
+     * Arka Plan Antrenman Dinleyicisi (HKObserverQuery + Immediate Background Delivery)
+     * Yeni antrenman HealthKit'e yazıldığı anda uygulamayı uyandırır.
+     */
+    public func startBackgroundWorkoutObserver(onNewWorkout: @escaping () -> Void) {
+        guard isHealthKitAvailable else { return }
+        let workoutType = HKObjectType.workoutType()
+        let query = HKObserverQuery(sampleType: workoutType, predicate: nil) { _, completionHandler, error in
+            if error == nil {
+                onNewWorkout()
+            }
+            completionHandler()
+        }
+        healthStore.execute(query)
+        healthStore.enableBackgroundDelivery(for: workoutType, frequency: .immediate) { _, _ in }
+    }
 }
